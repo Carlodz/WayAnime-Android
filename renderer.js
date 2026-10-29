@@ -18,6 +18,7 @@ const I = {
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
   cc: svg('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 10.5a2 2 0 1 0 0 3M16 10.5a2 2 0 1 0 0 3"/>'),
   heart: svg(HP), heartF: svg(HP, 1),
+  home: svg('<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
   clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>')
 };
 const view = $('#view');
@@ -1343,6 +1344,39 @@ document.querySelector('.sb').onclick = () => openSearch();
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#sm') ? closeSearch() : openSearch(); }
 });
+
+/* ===== زر «تصفّح»: قايمة (كومبو) فيها الأقسام + التصنيفات + المفضلة + الرئيسية ===== */
+(() => {
+  const btn = $('#mbtn'); if (!btn) return;
+  let menu = null;
+  const closeMenu = () => { if (menu) { menu.remove(); menu = null; } btn.classList.remove('open'); };
+  const openMenu = () => {
+    closeMenu(); btn.classList.add('open');
+    menu = document.createElement('div'); menu.id = 'mmenu';
+    const secs = AR_SECS.map(([v, n]) => `<button type="button" data-sec="${esc(v)}">${esc(n)}</button>`).join('');
+    const gens = AR_GENRES.map(([n, v]) => `<button type="button" data-gen="${esc(v)}">${esc(n)}</button>`).join('');
+    menu.innerHTML = `<div class="mmtop"><button type="button" data-go="home">${I.home || ''}<span>الرئيسية</span></button><button type="button" data-go="fav">${I.heartF || ''}<span>المفضلة</span></button></div>
+      <h5>الأقسام</h5><div class="mmgrid">${secs}</div>
+      <h5>التصنيفات</h5><div class="mmgrid mmgen">${gens}</div>`;
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.top = (r.bottom + 8) + 'px';
+    menu.style.insetInlineStart = 'auto';
+    menu.style.left = Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)) + 'px';
+    menu.onclick = (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      closeMenu(); $('#q').value = '';
+      if (b.dataset.go === 'home') { loadCatalog(); }
+      else if (b.dataset.go === 'fav') { showList(I.heartF + ' المفضلة', 'fav', 'nFav'); }
+      else if (b.dataset.sec) { AF.sec = b.dataset.sec; AF.genre = ''; AF.type = 'SERIES'; loadCatalog(); }
+      else if (b.dataset.gen) { AF.genre = b.dataset.gen; AF.type = 'SERIES'; loadCatalog(); }
+    };
+  };
+  btn.onclick = (e) => { e.stopPropagation(); menu ? closeMenu() : openMenu(); };
+  document.addEventListener('mousedown', (e) => { if (menu && !menu.contains(e.target) && !btn.contains(e.target)) closeMenu(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  window.addEventListener('resize', closeMenu);
+})();
 
 /* التطبيق عربي فقط: نستبدل دوال الكتالوج القديمة بالمصدر العربي */
 {
