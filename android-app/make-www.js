@@ -16,12 +16,11 @@ fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
 fs.copyFileSync(path.join(__dirname, 'mobile.css'), path.join(OUT, 'mobile.css'));
 fs.copyFileSync(path.join(__dirname, 'drawer.js'), path.join(OUT, 'drawer.js'));
 fs.copyFileSync(path.join(__dirname, 'player-fs.js'), path.join(OUT, 'player-fs.js'));
-fs.copyFileSync(path.join(__dirname, 'diag.js'), path.join(OUT, 'diag.js'));
 
 let html = rd('index.html');
 if (!/name="viewport"/.test(html)) html = html.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">');
 html = html.replace('</head>', '<link rel="stylesheet" href="mobile.css">\n</head>');
-html = html.replace('<script src="renderer.js"></script>', '<script src="android-api.js"></script>\n<script src="renderer.js"></script>\n<script src="drawer.js"></script>\n<script src="player-fs.js"></script>\n<script src="diag.js"></script>');
+html = html.replace('<script src="renderer.js"></script>', '<script src="android-api.js"></script>\n<script src="renderer.js"></script>\n<script src="drawer.js"></script>\n<script src="player-fs.js"></script>');
 if (!html.includes('android-api.js')) throw new Error('index.html: ما لقيتش مكان renderer.js');
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
 

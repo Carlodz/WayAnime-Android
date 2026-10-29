@@ -795,7 +795,7 @@ async function playWitLink(u) {
 }
 
 const AR_GENRES = [["أكشن", "Action"], ["مغامرة", "Adventure"], ["كوميدي", "Comedy"], ["دراما", "Drama"], ["خيال", "Fantasy"], ["إيسيكاي", "Isekai"], ["رومانسي", "Romance"], ["خيال علمي", "Sci-Fi"], ["شونين", "Shounen"], ["الحياة اليومية", "Slice-Of-Life"], ["خارق للطبيعة", "Supernatural"], ["غموض", "Mystery"], ["تشويق", "Suspense"], ["رياضي", "Sports"], ["مدرسي", "School"], ["سينين", "Seinen"], ["شوچو", "Shoujo"], ["رعب", "Horror"], ["ميكا", "Mecha"], ["تاريخي", "Historical"], ["قوى خارقة", "Super-Power"], ["سحر", "Magic"], ["أساطير", "Mythology"], ["عسكري", "Military"], ["إيتشي", "Ecchi"], ["حريم", "Harem"], ["بطولة راشدين", "Adult-Cast"], ["طعام", "Gourmet"], ["موسيقى", "Music"], ["فضاء", "Space"], ["بوليسي", "Detective"], ["سفر عبر الزمن", "Time-Travel"], ["مصاصي دماء", "Vampire"], ["سايبربانك", "Cyberpunk"]];
-const AR_SECS = [['RECENT', 'آخر الحلقات'], ['latest', 'آخر الإضافات'], ['POPULARITY', 'الأكثر شعبية'], ['HIGHEST_RATE', 'الأعلى تقييماً'], ['AIRING', 'يُعرض حالياً'], ['SEASON', 'أنمي الموسم'], ['SCHEDULE', 'جدول الحلقات'], ['DUBBED', 'مدبلج']];
+const AR_SECS = [['RECENT', 'آخر الحلقات'], ['latest', 'آخر الإضافات'], ['POPULARITY', 'الأكثر شعبية'], ['HIGHEST_RATE', 'الأعلى تقييماً'], ['AIRING', 'يُعرض حالياً'], ['SEASON', 'أنمي الموسم'], ['SCHEDULE', 'جدول الحلقات']];
 const AR_TYPES = [['SERIES', 'مسلسلات'], ['MOVIE', 'أفلام'], ['OVA', 'OVA'], ['SPECIAL', 'خاصة']];
 const AR_PAGE = 48;
 

@@ -64,7 +64,7 @@
   });
 
   /* ===== زر الكومبو (حدا البحث): الأقسام + المفضلة + الرئيسية + التصنيفات ===== */
-  const SECS = [['RECENT', 'آخر الحلقات'], ['latest', 'آخر الإضافات'], ['POPULARITY', 'الأكثر شعبية'], ['HIGHEST_RATE', 'الأعلى تقييماً'], ['AIRING', 'يُعرض حالياً'], ['SEASON', 'أنمي الموسم'], ['SCHEDULE', 'جدول الحلقات'], ['DUBBED', 'مدبلج']];
+  const SECS = [['RECENT', 'آخر الحلقات'], ['latest', 'آخر الإضافات'], ['POPULARITY', 'الأكثر شعبية'], ['HIGHEST_RATE', 'الأعلى تقييماً'], ['AIRING', 'يُعرض حالياً'], ['SEASON', 'أنمي الموسم'], ['SCHEDULE', 'جدول الحلقات']];
   const GRID = '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>';
   const TAG = '<svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg>';
   const sv = (p) => '<svg viewBox="0 0 24 24">' + p + '</svg>';
@@ -118,10 +118,8 @@
       it('', 'nHist', ICON.clock, 'سجل المشاهدة', hist) +
       '<hr>' +
       SECS.map(([v, n]) => it('', 'sec:' + v, SEC_ICON[v] || '<i class="dot"></i>', n, secOn === v)).join('') +
-      '<hr>' +
-      it('', 'genre', TAG, 'التصنيفات', false) +
-      '<hr>' + it('', 'diag', sv('<path d="M4 13h4l2-6 4 12 2-6h4"/>'), 'تشخيص المصادر', false) +
-      (profile().name ? it('', 'out', ICON.out, 'تسجيل الخروج', false) : '');
+      '<hr>' + it('', 'genre', TAG, 'التصنيفات', false) +
+      (profile().name ? '<hr>' + it('', 'out', ICON.out, 'تسجيل الخروج', false) : '');
     cb.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.k; cbClose();
       if (k === 'diag') { setTimeout(() => window.__waDiag && window.__waDiag(), 100); }

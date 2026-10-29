@@ -2,6 +2,7 @@ package com.wayanime.app;
 
 import android.app.Activity;
 import android.content.pm.ActivityInfo;
+import android.graphics.Color;
 import android.os.Build;
 import android.view.Window;
 import android.view.WindowManager;
@@ -12,6 +13,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /** ملء الشاشة الحقيقي: كيدور الهاتف أفقياً + كيخبّي شريط الحالة وأزرار التنقل (Immersive) + كيغطي الـ notch. */
@@ -26,9 +28,14 @@ public class ImmersivePlugin extends Plugin {
                 a.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
                 Window w = a.getWindow();
                 WindowCompat.setDecorFitsSystemWindows(w, false);
+                w.getDecorView().setBackgroundColor(Color.BLACK);
+                w.setStatusBarColor(Color.BLACK);
+                w.setNavigationBarColor(Color.BLACK);
                 if (Build.VERSION.SDK_INT >= 28) {
                     WindowManager.LayoutParams lp = w.getAttributes();
-                    lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                    lp.layoutInDisplayCutoutMode = Build.VERSION.SDK_INT >= 30
+                        ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                        : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
                     w.setAttributes(lp);
                 }
                 WindowInsetsControllerCompat c = WindowCompat.getInsetsController(w, w.getDecorView());

@@ -106,3 +106,21 @@ body.wa-fs{overflow:hidden}
 #pl.wa-fs .pbox{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;aspect-ratio:auto!important;border-radius:0!important;box-shadow:none!important}
 #pl.wa-fs .ptop{padding-top:calc(8px + env(safe-area-inset-top,0))!important;padding-inline:calc(12px + env(safe-area-inset-left,0)) calc(12px + env(safe-area-inset-right,0))!important}
 #pl.wa-fs .pbot{padding-bottom:calc(10px + env(safe-area-inset-bottom,0))!important;padding-inline:calc(12px + env(safe-area-inset-left,0)) calc(12px + env(safe-area-inset-right,0))!important}
+
+/* ما بقاش فلتر «كل التصنيفات» فـ الهاتف */
+#fgenre{height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:visible}
+#fgenre .ddb{display:none!important}
+
+/* ===== صفحة الأنمي فـ الهاتف: ترتيب عمودي (بوستر صغير ← عنوان ← أزرار ← شخصيات) بلا تراكب ===== */
+.hero:has(>.dp){height:auto!important;min-height:0!important;display:flex;flex-direction:column;align-items:flex-start;padding:calc(var(--hh) + 14px) var(--gut) 24px}
+.hero:has(>.dp)>div{position:relative!important;top:auto!important;bottom:auto!important;inset-inline-start:auto!important;inset-inline-end:auto!important;max-width:100%!important;width:100%;min-width:0}
+.hero:has(>.dp) .dp{position:relative!important;inset:auto!important;width:116px!important;margin:0 0 14px;border-radius:8px}
+.hero:has(>.dp) h2{font-size:26px!important;line-height:1.2!important;margin-bottom:6px!important}
+.hero:has(>.dp) .sub{font-size:13px;margin-bottom:12px}
+.hero:has(>.dp) .acts{margin-bottom:12px}
+.hero:has(>.dp) .acts .ghost{height:44px;flex:1 1 140px;justify-content:center}
+.hero:has(>.dp) .chars{max-width:100%;margin-top:14px}
+
+/* ===== المشغّل: تكبير الفيديو (cover) + الحواف ===== */
+#pl.wa-zoom video{object-fit:cover!important}
+#pl.wa-fs .pbox,#pl.wa-fs video{background:#000!important}

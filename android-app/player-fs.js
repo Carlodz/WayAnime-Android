@@ -22,6 +22,24 @@
     document.body.classList.toggle('wa-fs', v);
     native(v);
   }
+  // زر «تكبير الفيديو»: contain (كامل الصورة) ↔ cover (كيعمر الشاشة بلا حواف سوداء)
+  let zoom = false; try { zoom = localStorage.getItem('wa-zoom') === '1'; } catch {}
+  const ZI = '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 12h8M8 12l2-2M8 12l2 2M16 12l-2-2M16 12l-2 2"/></svg>';
+  function addZoom() {
+    const pl = $('#pl'); if (!pl) return;
+    pl.classList.toggle('wa-zoom', zoom);
+    if ($('#pzoom', pl)) return;
+    const fs = $('#pfs', pl); if (!fs) return;
+    const b = document.createElement('button'); b.id = 'pzoom'; b.type = 'button'; b.title = 'تكبير الفيديو (ملء الشاشة بلا حواف)'; b.innerHTML = ZI;
+    fs.parentNode.insertBefore(b, fs);
+  }
+  new MutationObserver(addZoom).observe(document.body, { childList: true });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('#pzoom'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    zoom = !zoom; try { localStorage.setItem('wa-zoom', zoom ? '1' : '0'); } catch {}
+    const pl = $('#pl'); if (pl) pl.classList.toggle('wa-zoom', zoom);
+  }, true);
   // كنعترضو الضغطة قبل ما توصل لـ requestFullscreen القديمة
   document.addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('#pfs'); if (!b) return;
