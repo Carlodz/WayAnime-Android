@@ -77,11 +77,48 @@ const absUrl = (u) => {
   return CARDS_SITE + (u.startsWith('/') ? '' : '/') + u;
 };
 async function fetchMe(sid) {
+  // الأول كنجربو الـ API الجديدة /api/wa/profile (صورة + بانر + نقاط)، وإلا ما كانتش كنرجعو لـ /api/me
+  try {
+    const rp = await fetch(CARDS_SITE + '/api/wa/profile', { headers: { Cookie: 'sid=' + sid, 'User-Agent': 'WayAnime' }, signal: AbortSignal.timeout(15000) });
+    if (rp.status === 401) return null;
+    if (rp.ok) {
+      const d = await rp.json();
+      if (d && d.ok) return { username: String(d.username || ''), pts: Number(d.pts) || 0, pic: absUrl(d.pic), banner: absUrl(d.banner) };
+    }
+  } catch (e) { console.log('[acct] /api/wa/profile failed, fallback /api/me:', e.message); }
   const r = await fetch(CARDS_SITE + '/api/me', { headers: { Cookie: 'sid=' + sid, 'User-Agent': 'WayAnime' }, signal: AbortSignal.timeout(15000) });
   if (r.status === 401) return null;
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const j = await r.json(); const u = j && j.user; if (!u) return null;
-  return { username: String(u.username || ''), pts: Number(u.pts) || 0, pic: absUrl(u.pic || u.avatar || u.avatarUrl || u.avatar_url || u.picture || u.image || u.photo || u.profile_pic || '') };
+  return { username: String(u.username || ''), pts: Number(u.pts) || 0, pic: pickPic(u, j), banner: pickBanner(u, j) };
+}
+// يلقى صورة البروفايل مهما كان سميت الحقل (يقلب فـ user وفـ ما بداخلو)
+function pickPic(u, root) {
+  const KEYS = ['pic', 'avatar', 'avatarUrl', 'avatar_url', 'avatarURL', 'picture', 'image', 'img', 'photo', 'photoUrl', 'photo_url', 'profile_pic', 'profilePic', 'profile_picture', 'profilePicture', 'profile_photo', 'profilePhoto', 'pfp', 'icon'];
+  const looksImg = (v) => typeof v === 'string' && v.trim() && (/^data:image\//i.test(v) || /^https?:\/\//i.test(v) || /^\//.test(v) || /\.(png|jpe?g|gif|webp|svg|avif)(\?|#|$)/i.test(v));
+  const fromVal = (v) => { if (!v) return ''; if (typeof v === 'object') v = v.url || v.src || v.path || v.href || ''; return looksImg(v) ? absUrl(v) : ''; };
+  for (const k of KEYS) { const r = fromVal(u[k]); if (r) return r; }
+  // أي حقل سميتو فيها pic/avatar/photo/img/pfp
+  for (const k of Object.keys(u)) { if (/pic|avatar|photo|img|image|pfp|portrait/i.test(k) && !/banner|cover|bg/i.test(k)) { const r = fromVal(u[k]); if (r) return r; } }
+  // كائنات متداخلة (profile / settings ...)
+  for (const k of Object.keys(u)) { const o = u[k]; if (o && typeof o === 'object' && !Array.isArray(o)) { for (const kk of Object.keys(o)) { if (/pic|avatar|photo|img|image|pfp/i.test(kk) && !/banner|cover|bg/i.test(kk)) { const r = fromVal(o[kk]); if (r) return r; } } } }
+  // مرات الصورة كتجي فـ root (j.avatar / j.pic)
+  if (root && typeof root === 'object') { for (const k of KEYS) { const r = fromVal(root[k]); if (r) return r; } }
+  console.log('[acct] no profile pic found, user keys:', Object.keys(u).join(','));
+  return '';
+}
+
+// يلقى بانر البروفايل (الصورة العريضة)
+function pickBanner(u, root) {
+  const KEYS = ['banner', 'bannerUrl', 'banner_url', 'bannerURL', 'bannerImage', 'banner_image', 'profile_banner', 'profileBanner', 'cover', 'coverUrl', 'cover_url', 'coverImage', 'header', 'headerImage', 'header_image', 'bg', 'background'];
+  const looksImg = (v) => typeof v === 'string' && v.trim() && (/^data:image\//i.test(v) || /^https?:\/\//i.test(v) || /^\//.test(v) || /\.(png|jpe?g|gif|webp|svg|avif)(\?|#|$)/i.test(v));
+  const fromVal = (v) => { if (!v) return ''; if (typeof v === 'object') v = v.url || v.src || v.path || v.href || ''; return looksImg(v) ? absUrl(v) : ''; };
+  for (const k of KEYS) { const r = fromVal(u[k]); if (r) return r; }
+  for (const k of Object.keys(u)) { if (/banner|cover|header/i.test(k)) { const r = fromVal(u[k]); if (r) return r; } }
+  for (const k of Object.keys(u)) { const o = u[k]; if (o && typeof o === 'object' && !Array.isArray(o)) { for (const kk of Object.keys(o)) { if (/banner|cover|header/i.test(kk)) { const r = fromVal(o[kk]); if (r) return r; } } } }
+  if (root && typeof root === 'object') { for (const k of KEYS) { const r = fromVal(root[k]); if (r) return r; } }
+  console.log('[acct] no banner found, user keys:', Object.keys(u).join(','));
+  return '';
 }
 ipcMain.handle('acct:me', async () => {
   const sid = readSid(); if (!sid) return { user: null };
@@ -987,14 +1024,52 @@ ipcMain.handle('custom:open', () => shell.openPath(ensureCustom()));
 
 // إشعارات النظام (حلقة جديدة)
 if (process.platform === 'win32') app.setAppUserModelId('com.wayanime.app');
-ipcMain.handle('notify:show', (_e, { title, body, id }) => {
+// تحميل صورة الأنمي (poster) للإشعار وتخزينها مؤقتاً
+async function notifyImage(url) {
+  try {
+    if (!/^https?:\/\//i.test(String(url || ''))) return null;
+    const dir = path.join(app.getPath('temp'), 'wayanime-notify');
+    fsx.mkdirSync(dir, { recursive: true });
+    const f = path.join(dir, require('crypto').createHash('md5').update(url).digest('hex') + '.jpg');
+    if (!fsx.existsSync(f)) {
+      const res = await require('electron').net.fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) return null;
+      fsx.writeFileSync(f, Buffer.from(await res.arrayBuffer()));
+    }
+    const img = nativeImage.createFromPath(f);
+    return img.isEmpty() ? null : { file: f, img };
+  } catch { return null; }
+}
+const xmlEsc = (s) => String(s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
+ipcMain.handle('notify:show', async (_e, { title, body, id, image }) => {
   if (!Notification.isSupported()) return false;
-  const n = new Notification({ title: String(title || 'WayAnime').slice(0, 120), body: String(body || '').slice(0, 250), icon: path.join(__dirname, 'assets', 'icon.png') });
-  n.on('click', () => {
+  title = String(title || 'WayAnime').slice(0, 120); body = String(body || '').slice(0, 250);
+  const appIcon = path.join(__dirname, 'assets', 'icon.png');
+  const pic = await notifyImage(image);
+  const open = () => {
     const w = BrowserWindow.getAllWindows()[0];
     if (w) { if (w.isMinimized()) w.restore(); w.show(); w.focus(); if (id) w.webContents.send('notify:open', id); }
-  });
-  n.show();
+  };
+  const plain = () => {
+    const n = new Notification({ title, body, icon: pic ? pic.img : appIcon });
+    n.on('click', open); n.show();
+  };
+  if (pic && process.platform === 'win32') {
+    // ويندوز: صورة الأنمي كبيرة فوق الإشعار + لوغو التطبيق صغير
+    const toastXml = '<toast><visual><binding template="ToastGeneric">' +
+      '<image placement="hero" src="' + xmlEsc(pic.file) + '"/>' +
+      '<image placement="appLogoOverride" hint-crop="circle" src="' + xmlEsc(appIcon) + '"/>' +
+      '<text>' + xmlEsc(title) + '</text><text>' + xmlEsc(body) + '</text>' +
+      '</binding></visual></toast>';
+    try {
+      const n = new Notification({ toastXml });
+      n.on('click', open);
+      n.on('failed', () => plain());
+      n.show();
+      return true;
+    } catch {}
+  }
+  plain();
   return true;
 });
 ipcMain.handle('bg:set', (_e, o) => {

@@ -612,7 +612,7 @@ async function subsUI(v, pl) {
 }
 
 /* ===== فتح ملف من الجهاز (أي صيغة) + سحب وإفلات ===== */
-$('#nOpen').onclick = async () => { try { const r = await window.api.media.open(); if (r) attach(r.url, { title: r.name }); } catch (e) { toast(errMsg(e)); } };
+const nOpenBtn = $('#nOpen'); if (nOpenBtn) nOpenBtn.onclick = async () => { try { const r = await window.api.media.open(); if (r) attach(r.url, { title: r.name }); } catch (e) { toast(errMsg(e)); } };
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', async (e) => {
   e.preventDefault();
@@ -794,7 +794,7 @@ async function playWitLink(u) {
 }
 
 const AR_GENRES = [["أكشن", "Action"], ["مغامرة", "Adventure"], ["كوميدي", "Comedy"], ["دراما", "Drama"], ["خيال", "Fantasy"], ["إيسيكاي", "Isekai"], ["رومانسي", "Romance"], ["خيال علمي", "Sci-Fi"], ["شونين", "Shounen"], ["الحياة اليومية", "Slice-Of-Life"], ["خارق للطبيعة", "Supernatural"], ["غموض", "Mystery"], ["تشويق", "Suspense"], ["رياضي", "Sports"], ["مدرسي", "School"], ["سينين", "Seinen"], ["شوچو", "Shoujo"], ["رعب", "Horror"], ["ميكا", "Mecha"], ["تاريخي", "Historical"], ["قوى خارقة", "Super-Power"], ["سحر", "Magic"], ["أساطير", "Mythology"], ["عسكري", "Military"], ["إيتشي", "Ecchi"], ["حريم", "Harem"], ["بطولة راشدين", "Adult-Cast"], ["طعام", "Gourmet"], ["موسيقى", "Music"], ["فضاء", "Space"], ["بوليسي", "Detective"], ["سفر عبر الزمن", "Time-Travel"], ["مصاصي دماء", "Vampire"], ["سايبربانك", "Cyberpunk"]];
-const AR_SECS = [['RECENT', 'آخر الحلقات'], ['latest', 'آخر الإضافات'], ['POPULARITY', 'الأكثر شعبية'], ['HIGHEST_RATE', 'الأعلى تقييماً'], ['AIRING', 'يُعرض حالياً'], ['SEASON', 'أنمي الموسم'], ['SCHEDULE', 'جدول الحلقات'], ['DUBBED', 'مدبلج'], ['CUSTOM', 'أنمي أضفته']];
+const AR_SECS = [['RECENT', 'آخر الحلقات'], ['latest', 'آخر الإضافات'], ['POPULARITY', 'الأكثر شعبية'], ['HIGHEST_RATE', 'الأعلى تقييماً'], ['AIRING', 'يُعرض حالياً'], ['SEASON', 'أنمي الموسم'], ['SCHEDULE', 'جدول الحلقات'], ['DUBBED', 'مدبلج']];
 const AR_TYPES = [['SERIES', 'مسلسلات'], ['MOVIE', 'أفلام'], ['OVA', 'OVA'], ['SPECIAL', 'خاصة']];
 const AR_PAGE = 48;
 
@@ -813,16 +813,43 @@ async function scheduleHtml() {
       + items.map(x => `<div class="card sch" tabindex="0" data-q="${esc(x.title)}" data-q2="${esc(x.romaji)}"><img loading="lazy" src="${esc(x.img)}" alt=""><p>${esc(x.title)}</p><div class="cm"><span>الحلقة ${esc(x.ep)}</span><b class="rt">${esc(new Date(x.at * 1000).toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }))}</b></div></div>`).join('') + '</div>';
   }).join('');
 }
+/* مطابقة دقيقة: نختار الأنمي الصحيح (نفس الاسم + نفس الموسم) وما نفتحوش أنمي آخر بالغلط */
+const _seasonOf = (t) => {
+  t = String(t || '').toLowerCase();
+  let m = t.match(/(?:season|s|part|cour)\s*(\d+)/) || t.match(/(\d+)(?:st|nd|rd|th)\s*season/);
+  if (m) return +m[1];
+  if (/\b(iii)\b/.test(t)) return 3; if (/\b(ii)\b/.test(t)) return 2; if (/\b(iv)\b/.test(t)) return 4;
+  m = t.match(/\s(\d)\s*$/); return m ? +m[1] : 1;
+};
+const _tok = (t) => new Set(normT(t).split(/\s+/).filter(w => w.length > 1));
+function _score(cand, titles) {
+  let best = 0;
+  const names = [cand.name, cand.nameEn].filter(Boolean);
+  for (const a of titles) {
+    const A = _tok(a); if (!A.size) continue;
+    for (const n of names) {
+      if (normT(n) === normT(a)) return 1 - (_seasonOf(n) === _seasonOf(a) ? 0 : 0.5);
+      const B = _tok(n); if (!B.size) continue;
+      let inter = 0; A.forEach(w => { if (B.has(w)) inter++; });
+      let sc = inter / Math.max(A.size, B.size);
+      if (_seasonOf(n) !== _seasonOf(a)) sc *= 0.5;
+      best = Math.max(best, sc);
+    }
+  }
+  return best;
+}
 async function openByTitle(c) {
   const t = c.dataset.q, r = c.dataset.q2 || t;
-  toast('جارٍ البحث عن «' + t + '»…');
+  toast('جارٍ فتح «' + t + '»…');
   try {
-    const ks = [t, r].map(normT).filter(k => k.length > 1);
-    const [a, w] = await Promise.all([window.api.ar.search(r).catch(() => []), witSearch(r)]);
-    const hit = dedupe([...a, ...w], newSeen()).find(m => keysOf(m).some(k => ks.includes(k)));
-    if (hit) { arCache.set(hit.id, hit); return openAr(hit.id); }
+    const titles = [...new Set([t, r].filter(Boolean))];
+    const batches = await Promise.all(titles.map(q => Promise.all([window.api.ar.search(q).catch(() => []), witSearch(q)])));
+    const pool = dedupe(batches.flat(2), newSeen());
+    let hit = null, hs = 0;
+    for (const m of pool) { const sc = _score(m, titles); if (sc > hs) { hs = sc; hit = m; } }
+    if (hit && hs >= 0.6) { arCache.set(hit.id, hit); return openAr(hit.id); }
   } catch {}
-  arLoadCatalog(r);
+  arLoadCatalog(r);   // ما لقيناش تطابق مؤكد: نعرضو نتائج البحث باش تختار نتا
 }
 function bindSchedule(box) {
   box.querySelectorAll('.sch').forEach(c => {
@@ -913,11 +940,24 @@ async function arLoadCatalog(search) {
   view.innerHTML = `<div class="sec"><div class="fbar">
       <div class="chips" id="fsec">${chips(AR_SECS, AF.genre ? '' : AF.sec, 'sec')}</div>
       <div class="chips" id="ftype">${chips(AR_TYPES, AF.type, 'type')}</div>
-      <select id="fgenre"><option value="">كل التصنيفات</option>${AR_GENRES.map(([n, v]) => `<option value="${esc(v)}"${v === AF.genre ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+      <div class="dd" id="fgenre"><button type="button" class="ddb"><span class="ddt">كل التصنيفات</span><svg class="i" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><div class="ddl" hidden><button type="button" data-v="">كل التصنيفات</button>${AR_GENRES.map(([n, v]) => `<button type="button" data-v="${esc(v)}">${esc(n)}</button>`).join('')}</div></div>
       <span class="mute" id="acount"></span></div>
     <div class="grid" id="agrid"></div>
     <div style="text-align:center;margin-top:26px"><button class="primary" id="amore">تحميل المزيد</button></div></div>`;
   $('.wrap').classList.add('hh'); view.scrollTop = 0; $('header').classList.remove('solid');
+  /* قائمة التصنيفات (بستايل التطبيق، بلا scroll: شبكة بعدة أعمدة) */
+  (() => {
+    const dd = $('#fgenre'), ddb = dd.querySelector('.ddb'), ddl = dd.querySelector('.ddl'), ddt = dd.querySelector('.ddt');
+    let val = '';
+    const paint = () => { const b = [...ddl.children].find(x => x.dataset.v === val) || ddl.children[0]; ddt.textContent = b.textContent; [...ddl.children].forEach(x => x.classList.toggle('on', x === b)); dd.classList.toggle('has', !!val); };
+    Object.defineProperty(dd, 'value', { get: () => val, set: (v) => { val = v || ''; paint(); } });
+    const close = () => { ddl.hidden = true; dd.classList.remove('open'); };
+    ddb.onclick = (e) => { e.stopPropagation(); const o = ddl.hidden; document.querySelectorAll('.dd .ddl').forEach(l => { l.hidden = true; }); ddl.hidden = !o; dd.classList.toggle('open', o); };
+    ddl.onclick = (e) => { const b = e.target.closest('button[data-v]'); if (!b) return; val = b.dataset.v; paint(); close(); dd.dispatchEvent(new Event('change')); };
+    document.addEventListener('click', (e) => { if (!dd.isConnected) return; if (!dd.contains(e.target)) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    val = AF.genre || ''; paint();
+  })();
   const syncChips = () => {
     view.querySelectorAll('#fsec .chip').forEach(c => c.classList.toggle('on', !AF.genre && c.dataset.sec === AF.sec));
     view.querySelectorAll('#ftype .chip').forEach(c => c.classList.toggle('on', c.dataset.type === AF.type));
@@ -943,7 +983,7 @@ async function arDetails(id) {
 }
 
 /* ===== إشعارات الحلقات الجديدة (للأنمي المستمر في المفضلة وآخر ما شاهدته) ===== */
-function noteEps(id, name, latest, aired, mode) {
+function noteEps(id, name, latest, aired, mode, poster) {
   const st = store.get('epSeen', {}), cur = st[id];
   st[id] = { n: Math.max(latest || 0, cur ? cur.n : 0), al: Math.max(aired || 0, cur ? cur.al : 0) };
   const ks = Object.keys(st); if (ks.length > 200) delete st[ks[0]];
@@ -954,7 +994,7 @@ function noteEps(id, name, latest, aired, mode) {
   else if (aired > cur.al && aired > latest) body = 'الحلقة ' + aired + ' عُرضت — الروابط قريباً';
   if (!body) return;
   if (mode !== 'page') toast(name + ': ' + body);
-  if (mode !== 'page' || !document.hasFocus()) window.api.notify({ title: name, body, id }).catch(() => {});
+  if (mode !== 'page' || !document.hasFocus()) window.api.notify({ title: name, body, id, image: poster || '' }).catch(() => {});
 }
 async function watchNew() {
   if (!notifyOn) return;
@@ -967,7 +1007,7 @@ async function watchNew() {
       const al = await anilistEps(m, true).catch(() => null);
       if (al && !al.next && al.status !== 'RELEASING') continue;     // أنمي منتهي → ما يهمناش
       const nums = eps.map(e => parseFloat(e.num)).filter(n => !isNaN(n));
-      noteEps(id, m.name, nums.length ? Math.max(...nums) : 0, al ? al.aired : 0);
+      noteEps(id, m.name, nums.length ? Math.max(...nums) : 0, al ? al.aired : 0, undefined, m.poster);
     } catch {}
     await new Promise(r => setTimeout(r, 1500));
   }
@@ -1412,8 +1452,10 @@ function showAcct(u) {
   const bust = (p) => /^https?:/i.test(p) ? p + (p.includes('?') ? '&' : '?') + '_wa=' + Math.floor(Date.now() / 60000) : p;
   const draw = () => {
     const fb = avatarLetter(cur.username);
+    if (cur.banner) { a.classList.add('hasban'); a.style.backgroundImage = 'url("' + String(bust(cur.banner)).replace(/"/g, '%22') + '")'; }
+    else { a.classList.remove('hasban'); a.style.backgroundImage = ''; }
     a.innerHTML = `<img id="acPic" src="${esc(cur.pic ? bust(cur.pic) : fb)}" alt="" referrerpolicy="no-referrer"><span>${esc(cur.username)}</span><span class="pt">${esc(cur.pts)}</span><button id="acOut" title="تسجيل الخروج">خروج</button>`;
-    const p = $('#acPic'); p.onerror = () => { p.onerror = null; p.src = fb; };
+    const p = $('#acPic'); p.onerror = () => { if (cur.pic && p.src !== cur.pic && !p.dataset.r) { p.dataset.r = 1; p.src = cur.pic; return; } p.onerror = null; p.src = fb; };
     $('#acOut').onclick = async () => { await window.api.acct.logout(); ['fav', 'hist', 'syncBase', 'syncDirty'].forEach(k => localStorage.removeItem('way:' + k)); location.reload(); };
   };
   draw();
@@ -1421,7 +1463,7 @@ function showAcct(u) {
   const refresh = async () => {
     try {
       const r = await window.api.acct.me();
-      if (r && r.user && (r.user.pic !== cur.pic || r.user.pts !== cur.pts || r.user.username !== cur.username)) { cur = r.user; draw(); }
+      if (r && r.user && (r.user.pic !== cur.pic || r.user.banner !== cur.banner || r.user.pts !== cur.pts || r.user.username !== cur.username)) { cur = r.user; draw(); }
     } catch {}
   };
   setInterval(refresh, 60 * 1000);

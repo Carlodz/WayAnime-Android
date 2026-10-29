@@ -109,3 +109,31 @@ body:has(#gate) header .brand,body:has(#gate) header .links,body:has(#gate) head
 #updbar{position:fixed;z-index:55;bottom:var(--s5);inset-inline-start:var(--s5);width:min(300px,86vw);padding:var(--s3) var(--s4);border-radius:var(--r-s);background:#181818f2;border:1px solid #ffffff1f;box-shadow:0 12px 36px #000c;font-size:13px;direction:rtl}
 #updbar i{display:block;height:4px;margin-top:var(--s2);border-radius:4px;background:#ffffff26;overflow:hidden}
 #updbar b{display:block;height:100%;width:0;background:var(--a1);transition:width .3s}
+
+/* البروفايل + البحث ف كتلة وحدة ملصوقين */
+.ub{display:flex;align-items:center;height:40px;gap:0;background:#000000a6;border:1px solid #ffffff59;border-radius:4px;overflow:hidden;-webkit-app-region:no-drag;transition:border-color .15s,background .15s}
+.ub:hover,.ub:focus-within{background:#000;border-color:#fff}
+.ub .sb{height:100%;border:0!important;border-radius:0!important;background:none!important}
+.ub #acct{height:100%;border:0;border-radius:0;background:none;padding-inline:var(--s2) var(--s3);border-inline-end:1px solid #ffffff33}
+.ub #acct[hidden]{display:none}
+
+/* قائمة التصنيفات */
+.dd{position:relative;display:inline-block}
+.ddb{height:38px;padding:0 var(--s3) 0 var(--s4);display:inline-flex;align-items:center;gap:var(--s2);border-radius:4px;font-size:13px;font-weight:600;background:#ffffff14;border:1px solid #ffffff2e;color:#e5e5e5;cursor:pointer;transition:all .2s}
+.ddb:hover,.dd.open .ddb{border-color:#fff;color:#fff}
+.dd.has .ddb{background:#fff;color:#000}
+.ddb svg.i{width:16px;height:16px;transition:transform .2s}
+.dd.open .ddb svg.i{transform:rotate(180deg)}
+.ddl{position:absolute;z-index:40;top:calc(100% + 6px);inset-inline-start:auto;inset-inline-end:0;width:min(640px,88vw);display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:4px;padding:8px;background:#181818f7;border:1px solid #ffffff2e;border-radius:6px;box-shadow:0 18px 40px #000000b3;max-height:70vh;overflow:auto;scrollbar-width:none}
+.ddl::-webkit-scrollbar{display:none}
+.ddl[hidden]{display:none}
+.ddl button{height:34px;padding:0 10px;border:0;border-radius:4px;background:none;color:#d8d6ea;font-size:13px;font-weight:600;text-align:start;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddl button:hover{background:#ffffff1f;color:#fff}
+.ddl button.on{background:#fff;color:#000}
+
+/* ===== بطاقة الحساب: مستطيل فيه البانر + الصورة + الاسم ===== */
+.ub #acct.hasban,#acct.hasban{position:relative;width:230px;min-width:230px;height:100%;border-radius:6px;overflow:hidden;background-size:cover;background-position:center;background-repeat:no-repeat;isolation:isolate;padding-inline:var(--s2) var(--s3)}
+#acct.hasban::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,#000000b3 0%,#00000066 55%,#00000099 100%)}
+#acct.hasban img{border-radius:6px;width:30px;height:30px;box-shadow:0 0 0 1.5px #ffffffb0}
+#acct.hasban span{text-shadow:0 1px 3px #000}
+#acct.hasban .pt{margin-inline-start:auto}
