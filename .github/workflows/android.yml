@@ -30,19 +30,48 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: App icon (best effort)
-        continue-on-error: true
+      - name: Native fullscreen plugin (landscape + immersive)
+        run: |
+          JAVA=android-app/android/app/src/main/java/com/wayanime/app
+          mkdir -p $JAVA
+          cp android-app/native/ImmersivePlugin.java android-app/native/MainActivity.java $JAVA/
+
+      - name: App icon
         run: |
           set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick
+          if command -v magick >/dev/null 2>&1; then IM=magick; else IM=convert; fi
           RES=android-app/android/app/src/main/res
+          # الشعار عريض (3 أشكال) داخل مربع فيه فراغ كبير -> نقصّو الفراغ ونكبّروه باش يبان
+          $IM assets/icon.png -trim +repage /tmp/mark.png
           for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
             IFS=: read n s f <<< "$d"
-            inner=$((f*60/100))
-            convert assets/icon.png -resize ${s}x${s} $RES/mipmap-$n/ic_launcher.png
-            convert assets/icon.png -resize ${s}x${s} $RES/mipmap-$n/ic_launcher_round.png
-            convert assets/icon.png -resize ${inner}x${inner} -background none -gravity center -extent ${f}x${f} $RES/mipmap-$n/ic_launcher_foreground.png
+            mw=$((s*74/100))
+            fw=$((f*56/100))
+            $IM /tmp/mark.png -resize ${mw}x /tmp/m_s.png
+            $IM -size ${s}x${s} xc:'#0b0a10' /tmp/m_s.png -gravity center -composite $RES/mipmap-$n/ic_launcher.png
+            $IM $RES/mipmap-$n/ic_launcher.png \( -size ${s}x${s} xc:black -fill white -draw "circle $((s/2)),$((s/2)) $((s/2)),0" \) -alpha off -compose CopyOpacity -composite $RES/mipmap-$n/ic_launcher_round.png
+            $IM /tmp/mark.png -resize ${fw}x -background none -gravity center -extent ${f}x${f} $RES/mipmap-$n/ic_launcher_foreground.png
           done
-          sed -i 's/#FFFFFF/#0b0a10/I' $RES/values/ic_launcher_background.xml
+          # Capacitor كيجي بأيقونة adaptive ديالو (X زرقاء + grid) محددة فـ XML -> نبدلوها بديالنا
+          rm -f $RES/drawable-v24/ic_launcher_foreground.xml $RES/drawable/ic_launcher_background.xml $RES/drawable/ic_launcher_foreground.xml $RES/drawable-v24/ic_launcher_background.xml
+          mkdir -p $RES/mipmap-anydpi-v26 $RES/values
+          cat > $RES/values/wa_icon_colors.xml <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="wa_icon_bg">#0b0a10</color>
+          </resources>
+          XML
+          for x in ic_launcher ic_launcher_round; do
+            cat > $RES/mipmap-anydpi-v26/$x.xml <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/wa_icon_bg"/>
+              <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+          </adaptive-icon>
+          XML
+          done
 
       - name: Build debug APK
         working-directory: android-app/android
