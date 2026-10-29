@@ -1,0 +1,21 @@
+/* تعديلات الهاتف (Android) */
+:root{--gut:14px;--hh:56px}
+html,body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+.wc,#nOpen,.brand span{display:none!important}
+header{gap:8px!important;padding:0 10px!important;height:56px!important}
+.brand .logo{width:30px;height:30px}
+.links{gap:0!important;overflow-x:auto}
+.links button{padding:8px 9px!important;font-size:13px!important;white-space:nowrap}
+.sb{width:104px!important;padding:0 10px!important}
+.sb input{font-size:13px}
+#acct{max-width:96px;overflow:hidden}
+.hero{height:340px!important}
+.hmeta{min-width:0!important;flex-wrap:wrap}
+.grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))!important;gap:14px 10px!important}
+.eps{grid-template-columns:repeat(auto-fill,minmax(52px,1fr))!important}
+#pl .pbox{width:100vw!important;max-height:100vh}
+#pl .pbox:fullscreen{width:100%!important}
+#pl .pcen{width:64px;height:64px}
+#pl .pbot{padding:28px 12px 10px;gap:8px}
+.smenu{left:8px!important;max-width:calc(100vw - 16px)}
+@media (orientation:portrait){.hero{height:300px!important}}

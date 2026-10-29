@@ -10,27 +10,17 @@ const rd = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 const cp = (src, dst) => fs.cpSync(path.join(ROOT, src), path.join(OUT, dst || src), { recursive: true });
-const MOBILE = path.join(__dirname, 'mobile');
-const useMobile = !process.env.WAY_CLASSIC && fs.existsSync(path.join(MOBILE, 'index.html'));
+['renderer.js', 'ui.css', 'cinema.css', 'fonts'].forEach((f) => cp(f));
 fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
-const assets = useMobile ? ['icon.png', 'logo.png'] : ['icon.png', 'logo.png', 'itachi.mp4', 'logos', 'cards'];
-assets.forEach((f) => { try { cp('assets/' + f, 'assets/' + f); } catch {} });
+['icon.png', 'logo.png', 'itachi.mp4', 'logos', 'cards'].forEach((f) => { try { cp('assets/' + f, 'assets/' + f); } catch {} });
+fs.copyFileSync(path.join(__dirname, 'mobile.css'), path.join(OUT, 'mobile.css'));
 
-if (useMobile) {
-  // الواجهة الجديدة للهاتف (android-app/mobile): HTML + CSS + JS
-  cp('fonts');
-  ['index.html', 'm.css', 'm.js'].forEach((f) => fs.copyFileSync(path.join(MOBILE, f), path.join(OUT, f)));
-} else {
-  // الواجهة الكلاسيكية (نسخة الكمبيوتر + mobile.css)
-  ['renderer.js', 'ui.css', 'cinema.css', 'fonts'].forEach((f) => cp(f));
-  fs.copyFileSync(path.join(__dirname, 'mobile.css'), path.join(OUT, 'mobile.css'));
-  let html = rd('index.html');
-  if (!/name="viewport"/.test(html)) html = html.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">');
-  html = html.replace('</head>', '<link rel="stylesheet" href="mobile.css">\n</head>');
-  html = html.replace('<script src="renderer.js"></script>', '<script src="android-api.js"></script>\n<script src="renderer.js"></script>');
-  if (!html.includes('android-api.js')) throw new Error('index.html: ما لقيتش مكان renderer.js');
-  fs.writeFileSync(path.join(OUT, 'index.html'), html);
-}
+let html = rd('index.html');
+if (!/name="viewport"/.test(html)) html = html.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">');
+html = html.replace('</head>', '<link rel="stylesheet" href="mobile.css">\n</head>');
+html = html.replace('<script src="renderer.js"></script>', '<script src="android-api.js"></script>\n<script src="renderer.js"></script>');
+if (!html.includes('android-api.js')) throw new Error('index.html: ما لقيتش مكان renderer.js');
+fs.writeFileSync(path.join(OUT, 'index.html'), html);
 
 // ---------- 2) android-api.js ----------
 const src = rd('main.js');
@@ -78,6 +68,73 @@ const CARDS_SITE = ${JSON.stringify(site)};
 const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 if (!AbortSignal.timeout) AbortSignal.timeout = (ms) => { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; };
 if (!window.crypto.randomUUID) window.crypto.randomUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
+
+// fetch عبر HTTP الأصلي ديال Android (بلا CORS، وكيقبل Referer/Cookie/User-Agent)
+const __call = (p, m, o) => { const C = window.Capacitor; return C && C.Plugins && C.Plugins[p] && C.Plugins[p][m] ? C.Plugins[p][m](o) : C.nativePromise(p, m, o); };
+async function fetch(url, o = {}) {
+  if (!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return window.fetch(url, { ...o, signal: undefined });
+  const headers = { ...(o.headers || {}) };
+  if (!Object.keys(headers).some((k) => k.toLowerCase() === 'user-agent')) headers['User-Agent'] = UA_ANDROID;
+  let data = o.body;
+  const ck = Object.keys(headers).find((k) => k.toLowerCase() === 'content-type');
+  if (data && ck && /json/i.test(headers[ck])) { try { data = JSON.parse(data); } catch {} }
+  const r = await __call('CapacitorHttp', 'request', { url: String(url), method: String(o.method || 'GET').toUpperCase(), headers, data, responseType: 'text', connectTimeout: 20000, readTimeout: 30000 });
+  const raw = {}; Object.keys(r.headers || {}).forEach((k) => { raw[k.toLowerCase()] = r.headers[k]; });
+  const txt = typeof r.data === 'string' ? r.data : JSON.stringify(r.data == null ? '' : r.data);
+  const sc = raw['set-cookie'];
+  return {
+    ok: r.status >= 200 && r.status < 300, status: r.status, url: r.url || String(url), body: null,
+    headers: { get: (k) => (raw[String(k).toLowerCase()] == null ? null : String(raw[String(k).toLowerCase()])), getSetCookie: () => (sc ? (Array.isArray(sc) ? sc : String(sc).split(/,(?=\\s*[\\w-]+=)/)) : []) },
+    text: async () => txt, json: async () => JSON.parse(txt)
+  };
+}
+
+const __H = {};
+const ipcMain = { handle: (n, f) => { __H[n] = f; } };
+const __bus = {};
+const sidGet = () => { try { return localStorage.getItem('wayanime-sid') || ''; } catch { return ''; } };
+const sidSet = (v) => { try { v ? localStorage.setItem('wayanime-sid', v) : localStorage.removeItem('wayanime-sid'); } catch {} };
+const readSid = sidGet, saveSid = sidSet;
 `;
-// Note: full file is truncated in this push for length; the complete make-www.js is in the original zip. Please upload the full file from the zip for complete functionality.
-console.log('make-www placeholder - upload full from zip');
+
+const footer = `
+const __NOOP = { 'bg:set': true, 'notify:show': false, 'update:state': null, 'update:install': null, 'win:min': true, 'win:max': false, 'win:close': true, 'custom:list': [], 'custom:open': null, 'media:stop': true };
+async function __invoke(n, ...a) {
+  if (n === 'open:external') { window.open(String(a[0]), '_system'); return true; }
+  if (n === 'logos:list') return LOGOS;
+  if (n in __H) return __H[n]({}, ...a);
+  if (n in __NOOP) return __NOOP[n];
+  if (n === 'torrent:start') throw new Error('التورنت غير مدعوم فـ نسخة Android');
+  if (n.indexOf('media:') === 0 || n === 'transcode:start') throw new Error('هاد الصيغة ما كتتشغلش فـ Android. جرّب سيرفر آخر.');
+  throw new Error('هاد الميزة غير متوفرة فـ نسخة Android');
+}
+// نفس واجهة preload.js ديال الويندوز
+(function () {
+  const require = () => ({
+    contextBridge: { exposeInMainWorld: (k, v) => { window[k] = v; } },
+    ipcRenderer: { invoke: (n, ...a) => __invoke(n, ...a), on: (ch, cb) => { (__bus[ch] = __bus[ch] || []).push(cb); } },
+    webUtils: { getPathForFile: () => '' }
+  });
+${rd('preload.js')}
+})();
+// زر الرجوع ديال Android
+document.addEventListener('DOMContentLoaded', () => {
+  const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (!App) return;
+  App.addListener('backButton', () => {
+    if (document.querySelector('#pl')) return document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    const b = document.querySelector('#wBack');
+    if (b && !b.disabled) b.click(); else if (App.minimizeApp) App.minimizeApp();
+  });
+});
+window.__wayHandlers = __H;   // للاختبار
+})();
+`;
+
+let out = header + '\n' + blkAddon + '\n' + blkAcct + '\n' + blkB + '\n' + blkC + footer;
+const bad = out.match(/require\((?!\))|process\.|__dirname|Buffer\.|ipcRenderer\.send|shell\.|app\.getPath|safeStorage/g);
+// preload.js كيستعمل require('electron') داخل الـ wrapper — هادا مقبول
+const left = (out.match(/\brequire\([^)]*\)/g) || []).filter((x) => x !== "require('electron')");
+if (left.length) throw new Error('بقاو require فـ الكود المولّد: ' + left.join(', '));
+fs.writeFileSync(path.join(OUT, 'android-api.js'), out);
+console.log('OK → ' + OUT + ' (' + Math.round(out.length / 1024) + ' KB)', bad ? '[تنبيه: ' + [...new Set(bad)].join(',') + ']' : '');
