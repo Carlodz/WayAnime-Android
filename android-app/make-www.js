@@ -14,11 +14,14 @@ const cp = (src, dst) => fs.cpSync(path.join(ROOT, src), path.join(OUT, dst || s
 fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
 ['icon.png', 'logo.png', 'itachi.mp4', 'logos', 'cards'].forEach((f) => { try { cp('assets/' + f, 'assets/' + f); } catch {} });
 fs.copyFileSync(path.join(__dirname, 'mobile.css'), path.join(OUT, 'mobile.css'));
+fs.copyFileSync(path.join(__dirname, 'drawer.js'), path.join(OUT, 'drawer.js'));
+fs.copyFileSync(path.join(__dirname, 'player-fs.js'), path.join(OUT, 'player-fs.js'));
+fs.copyFileSync(path.join(__dirname, 'diag.js'), path.join(OUT, 'diag.js'));
 
 let html = rd('index.html');
 if (!/name="viewport"/.test(html)) html = html.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">');
 html = html.replace('</head>', '<link rel="stylesheet" href="mobile.css">\n</head>');
-html = html.replace('<script src="renderer.js"></script>', '<script src="android-api.js"></script>\n<script src="renderer.js"></script>');
+html = html.replace('<script src="renderer.js"></script>', '<script src="android-api.js"></script>\n<script src="renderer.js"></script>\n<script src="drawer.js"></script>\n<script src="player-fs.js"></script>\n<script src="diag.js"></script>');
 if (!html.includes('android-api.js')) throw new Error('index.html: ما لقيتش مكان renderer.js');
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
 
@@ -76,8 +79,12 @@ async function fetch(url, o = {}) {
   const headers = { ...(o.headers || {}) };
   if (!Object.keys(headers).some((k) => k.toLowerCase() === 'user-agent')) headers['User-Agent'] = UA_ANDROID;
   let data = o.body;
-  const ck = Object.keys(headers).find((k) => k.toLowerCase() === 'content-type');
+  // URLSearchParams كيتحوّل لـ {} فـ الجسر ديال Capacitor + بلا Content-Type ما كيتصيفطش الجسم أصلاً (هادا كان سبب الكتالوج الفارغ)
+  if (typeof URLSearchParams !== 'undefined' && data instanceof URLSearchParams) data = data.toString();
+  let ck = Object.keys(headers).find((k) => k.toLowerCase() === 'content-type');
+  if (typeof data === 'string' && !ck) { headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8'; ck = 'Content-Type'; }
   if (data && ck && /json/i.test(headers[ck])) { try { data = JSON.parse(data); } catch {} }
+  else if (typeof data === 'string' && ck && /x-www-form-urlencoded/i.test(headers[ck])) data = Object.fromEntries(new URLSearchParams(data));
   const r = await __call('CapacitorHttp', 'request', { url: String(url), method: String(o.method || 'GET').toUpperCase(), headers, data, responseType: 'text', connectTimeout: 20000, readTimeout: 30000 });
   const raw = {}; Object.keys(r.headers || {}).forEach((k) => { raw[k.toLowerCase()] = r.headers[k]; });
   const txt = typeof r.data === 'string' ? r.data : JSON.stringify(r.data == null ? '' : r.data);
@@ -122,12 +129,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
   if (!App) return;
   App.addListener('backButton', () => {
+    if (document.body.classList.contains('dr-open') || document.body.classList.contains('cb-open')) return document.dispatchEvent(new CustomEvent('wa-close-drawer'));
     if (document.querySelector('#pl')) return document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     const b = document.querySelector('#wBack');
     if (b && !b.disabled) b.click(); else if (App.minimizeApp) App.minimizeApp();
   });
 });
-window.__wayHandlers = __H;   // للاختبار
+window.__wayHandlers = __H; window.__waFetch = fetch;   // للاختبار
 })();
 `;
 
