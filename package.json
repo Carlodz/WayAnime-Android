@@ -1,86 +1,14 @@
 {
-  "name": "wayanime",
-  "productName": "WayAnime",
-  "version": "1.2.1",
-  "description": "WayAnime - Desktop anime client (Stremio addons protocol)",
-  "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --win"
-  },
-  "build": {
-    "appId": "com.wayanime.app",
-    "productName": "WayAnime",
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "assets/icon.ico",
-      "requestedExecutionLevel": "asInvoker",
-      "legalTrademarks": "WayAnime",
-      "signingHashAlgorithms": [
-        "sha256"
-      ]
-    },
-    "files": [
-      "**/*",
-      "!README.md",
-      "!build/**",
-      "!dist/**",
-      "!build-installer.bat",
-      "!UPDATE.md",
-      "!SIGNING.md",
-      "!*.pfx",
-      "!*.p12",
-      "!*.cer",
-      "!android-app/**",
-      "!.github/**",
-      "!.gitignore"
-    ],
-    "asarUnpack": [
-      "node_modules/ffmpeg-static/**"
-    ],
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "allowElevation": true,
-      "createDesktopShortcut": "always",
-      "createStartMenuShortcut": true,
-      "shortcutName": "WayAnime",
-      "runAfterFinish": true,
-      "deleteAppDataOnUninstall": false,
-      "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico",
-      "installerHeaderIcon": "assets/icon.ico",
-      "installerSidebar": "build/installerSidebar.bmp",
-      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
-      "installerHeader": "build/installerHeader.bmp",
-      "include": "build/installer.nsh"
-    },
-    "artifactName": "WayAnime-Setup-${version}.${ext}",
-    "copyright": "Copyright © carlodz",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "YOUR-NAME",
-        "repo": "wayanime-updates"
-      }
-    ]
-  },
-  "devDependencies": {
-    "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
-  },
+  "name": "wayanime-android",
+  "version": "1.2.0",
+  "private": true,
+  "description": "WayAnime Android (Capacitor)",
   "dependencies": {
-    "webtorrent": "1.9.7",
-    "ffmpeg-static": "^5.2.0",
-    "electron-updater": "^6.3.9"
-  },
-  "author": "carlodz"
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/screen-orientation": "^6.0.2",
+    "@capacitor/status-bar": "^6.0.1"
+  }
 }
