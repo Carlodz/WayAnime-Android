@@ -26,6 +26,20 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Stamp build version
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          RUN=${{ github.run_number }}
+          SHA=$(git rev-parse --short HEAD)
+          DATE=$(date -u +%Y-%m-%d_%H:%M)
+          echo "WA_TAG=v${VER}-run${RUN}-${SHA}" >> $GITHUB_ENV
+          echo "window.WA_BUILD={v:'${VER}',run:${RUN},sha:'${SHA}',date:'${DATE}'};" > www/version.js
+          sed -i 's#<script src="android-api.js"></script>#<script src="version.js"></script>\n<script src="android-api.js"></script>#' www/index.html
+          npx cap sync android
+          G=android/app/build.gradle
+          sed -i "s/versionCode [0-9]*/versionCode ${RUN}/; s/versionName \"[^\"]*\"/versionName \"${VER}.${RUN}\"/" $G
+          grep -n "versionCode\|versionName" $G
+
       - name: Native fullscreen plugin (landscape + immersive)
         run: |
           JAVA=android/app/src/main/java/com/wayanime/app
@@ -75,7 +89,10 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk "WayAnime-${WA_TAG}.apk"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: WayAnime-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: WayAnime-${{ env.WA_TAG }}
+          path: WayAnime-${{ env.WA_TAG }}.apk
