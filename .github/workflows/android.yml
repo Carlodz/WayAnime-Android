@@ -43,13 +43,16 @@ jobs:
           sudo apt-get install -y -qq imagemagick
           if command -v magick >/dev/null 2>&1; then IM=magick; else IM=convert; fi
           RES=android-app/android/app/src/main/res
+          ICON=assets/app-icon.png
+          if [ ! -f "$ICON" ]; then echo "::warning::assets/app-icon.png غير موجود في المستودع، نستعمل assets/icon.png"; ICON=assets/icon.png; fi
+          ls -la assets | head -20
           # الأيقونة صورة كاملة (مربعة): بلا trim، legacy بملء الصورة، round بقناع دائري، foreground للـ adaptive بحجم 66% فوق لون الخلفية
           for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
             IFS=: read n s f <<< "$d"
             fw=$((f*66/100))
-            $IM assets/app-icon.png -resize ${s}x${s} $RES/mipmap-$n/ic_launcher.png
+            $IM "$ICON" -resize ${s}x${s} $RES/mipmap-$n/ic_launcher.png
             $IM $RES/mipmap-$n/ic_launcher.png \( -size ${s}x${s} xc:black -fill white -draw "circle $((s/2)),$((s/2)) $((s/2)),0" \) -alpha off -compose CopyOpacity -composite $RES/mipmap-$n/ic_launcher_round.png
-            $IM assets/app-icon.png -resize ${fw}x${fw} -background none -gravity center -extent ${f}x${f} $RES/mipmap-$n/ic_launcher_foreground.png
+            $IM "$ICON" -resize ${fw}x${fw} -background none -gravity center -extent ${f}x${f} $RES/mipmap-$n/ic_launcher_foreground.png
           done
           # Capacitor كيجي بأيقونة adaptive ديالو (X زرقاء + grid) محددة فـ XML -> نبدلوها بديالنا
           rm -f $RES/drawable-v24/ic_launcher_foreground.xml $RES/drawable/ic_launcher_background.xml $RES/drawable/ic_launcher_foreground.xml $RES/drawable-v24/ic_launcher_background.xml
