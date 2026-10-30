@@ -20,11 +20,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Generate www (from the desktop sources)
-        run: node android-app/make-www.js
-
       - name: Capacitor - add android + sync
-        working-directory: android-app
         run: |
           npm install
           npx cap add android
@@ -32,9 +28,9 @@ jobs:
 
       - name: Native fullscreen plugin (landscape + immersive)
         run: |
-          JAVA=android-app/android/app/src/main/java/com/wayanime/app
+          JAVA=android/app/src/main/java/com/wayanime/app
           mkdir -p $JAVA
-          cp android-app/native/ImmersivePlugin.java android-app/native/MainActivity.java $JAVA/
+          cp native/ImmersivePlugin.java native/MainActivity.java $JAVA/
 
       - name: App icon
         run: |
@@ -42,7 +38,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq imagemagick
           if command -v magick >/dev/null 2>&1; then IM=magick; else IM=convert; fi
-          RES=android-app/android/app/src/main/res
+          RES=android/app/src/main/res
           ICON=assets/app-icon.png
           if [ ! -f "$ICON" ]; then echo "::warning::assets/app-icon.png غير موجود في المستودع، نستعمل assets/icon.png"; ICON=assets/icon.png; fi
           ls -la assets | head -20
@@ -74,7 +70,7 @@ jobs:
           done
 
       - name: Build debug APK
-        working-directory: android-app/android
+        working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
@@ -82,4 +78,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: WayAnime-apk
-          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
