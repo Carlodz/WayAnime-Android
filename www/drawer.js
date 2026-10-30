@@ -48,7 +48,8 @@
         '<button data-t="nHist" class="' + cur('nHist').trim() + '">' + ICON.clock + '<span>سجل المشاهدة</span></button>' +
         '<button data-t="genre">' + ICON.tag + '<span>التصنيفات</span></button>' +
       '</nav>' +
-      (p.name ? '<button class="drout">' + ICON.out + '<span>تسجيل الخروج</span></button>' : '');
+      (p.name ? '<button class="drout">' + ICON.out + '<span>تسجيل الخروج</span></button>' : '') +
+      '<div class="drver" style="padding:14px 18px;font-size:12px;opacity:.55;direction:ltr;text-align:center">' + (window.WA_BUILD ? 'v' + window.WA_BUILD.v + ' · build #' + window.WA_BUILD.run + ' · ' + window.WA_BUILD.sha + '<br>' + window.WA_BUILD.date + ' UTC' : 'dev build (no version)') + '</div>';
     dr.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.t === 'genre') { close(); setTimeout(goGenre, 150); return; }
       const t = $('#' + b.dataset.t); close(); if (t) setTimeout(() => t.click(), 120);
