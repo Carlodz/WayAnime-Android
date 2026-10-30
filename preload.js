@@ -9,7 +9,6 @@ contextBridge.exposeInMainWorld('api', {
   notify: (o) => ipcRenderer.invoke('notify:show', o),
   onNotifyOpen: (cb) => ipcRenderer.on('notify:open', (_e, id) => cb(id)),
   anilistDesc: (names) => ipcRenderer.invoke('anilist:desc', names),
-  recent: () => ipcRenderer.invoke('anilist:recent'),
   schedule: (d) => ipcRenderer.invoke('anilist:schedule', d),
   anilistChars: (id) => ipcRenderer.invoke('anilist:chars', id),
   torrent: (opts) => ipcRenderer.invoke('torrent:start', opts),
@@ -26,7 +25,7 @@ contextBridge.exposeInMainWorld('api', {
     streams: (ep) => ipcRenderer.invoke('ar:streams', ep),
     direct: (u) => ipcRenderer.invoke('ar:direct', u)
   },
-  dub: { list: () => ipcRenderer.invoke('dub:list'), search: (q) => ipcRenderer.invoke('dub:search', q), detail: (id) => ipcRenderer.invoke('dub:detail', id), episodes: (id) => ipcRenderer.invoke('dub:episodes', id), streams: (o) => ipcRenderer.invoke('dub:streams', o) },
+  dub: { latest: () => ipcRenderer.invoke('dub:latest'), list: () => ipcRenderer.invoke('dub:list'), search: (q) => ipcRenderer.invoke('dub:search', q), detail: (id) => ipcRenderer.invoke('dub:detail', id), episodes: (id) => ipcRenderer.invoke('dub:episodes', id), streams: (o) => ipcRenderer.invoke('dub:streams', o) },
   custom: { list: () => ipcRenderer.invoke('custom:list'), open: () => ipcRenderer.invoke('custom:open') },
   resolveHost: (u) => ipcRenderer.invoke('host:resolve', u),
   html: (url) => ipcRenderer.invoke('web:html', url),

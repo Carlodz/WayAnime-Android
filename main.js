@@ -276,31 +276,6 @@ ipcMain.handle('anilist:schedule', async (_e, days) => {
   return out;
 });
 
-// AniList: آخر الحلقات اللي خرجات (آخر 3 أيام) — حلقة وحدة لكل أنمي، الأحدث الأول
-ipcMain.handle('anilist:recent', async () => {
-  const to = Math.floor(Date.now() / 1000), from = to - 3 * 86400;
-  const query = 'query($from:Int,$to:Int,$page:Int){Page(page:$page,perPage:50){pageInfo{hasNextPage} airingSchedules(airingAt_greater:$from,airingAt_lesser:$to,sort:TIME_DESC){airingAt episode media{id format status countryOfOrigin isAdult averageScore title{romaji english native} coverImage{large medium}}}}}';
-  const out = [], seen = new Set();
-  for (let page = 1; page <= 6; page++) {
-    const r = await fetch('https://graphql.anilist.co', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ query, variables: { from, to, page } }), signal: AbortSignal.timeout(12000)
-    });
-    if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 1500)); page--; continue; }
-    if (!r.ok) throw new Error('AniList HTTP ' + r.status);
-    const j = await r.json();
-    const P = j.data && j.data.Page; if (!P) break;
-    for (const s of P.airingSchedules || []) {
-      const md = s.media;
-      if (!md || md.isAdult || md.countryOfOrigin !== 'JP' || seen.has(md.id) || !/^(TV|TV_SHORT|ONA)$/.test(md.format || '')) continue;
-      seen.add(md.id);
-      out.push({ at: s.airingAt, ep: s.episode, id: md.id, status: md.status, score: md.averageScore ? (md.averageScore / 10).toFixed(2).replace(/0$/, '') : '', title: md.title.english || md.title.romaji || md.title.native || '', romaji: md.title.romaji || '', img: (md.coverImage && (md.coverImage.large || md.coverImage.medium)) || '' });
-    }
-    if (!P.pageInfo || !P.pageInfo.hasNextPage) break;
-  }
-  return out;
-});
-
 // AniList: شخصيات الأنمي (بالـ id اللي لقيناه فـ anilist:info)
 ipcMain.handle('anilist:chars', async (_e, id) => {
   const query = 'query($id:Int){Media(id:$id,type:ANIME){characters(sort:[ROLE,FAVOURITES_DESC],perPage:12){edges{role node{id name{full native} image{large medium}}}}}}';
@@ -784,6 +759,19 @@ ipcMain.handle('dub:episodes', async (_e, id) => {
   });
   const useRaw = new Set(prep.map((x) => x[1])).size === prep.length;
   return { movie: false, eps: prep.map(([it, n, title], i) => ({ num: String(useRaw ? n : i + 1), title, id: String(it.id) })) };
+});
+// آخر حلقات مدبلجة حقيقية من Stardima (نفس مصدر الحلقات، مش AniList)
+ipcMain.handle('dub:latest', async () => {
+  const cat = sdCatalog(), out = [], seen = new Set();
+  const feeds = await Promise.all([1, 2].map((p) => sdGet('/api/episodes', { page: p, per_page: 60 })));
+  for (const f of feeds) for (const v of sdVideos(f)) {
+    const id = String(v.id || v.video_episode || '');
+    if (!id || !cat[id] || !sdDub(v)) continue;
+    const n = parseFloat(v.episode_number), key = id + ':' + (v.episode_number || v.title);
+    if (seen.has(key)) continue; seen.add(key);
+    out.push({ ...sdItem({ ...v, id }), ep: isNaN(n) ? '' : String(n) });
+  }
+  return out;
 });
 async function sdAlive(url) {
   for (const [method, headers] of [['HEAD', {}], ['GET', { Range: 'bytes=0-0' }]]) {

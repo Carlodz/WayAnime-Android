@@ -6,6 +6,7 @@ const svg = (b, f) => `<svg class="i${f ? ' f' : ''}" viewBox="0 0 24 24">${b}</
 const HP = '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>';
 const SP = '<polygon points="3 9 8 9 13 5 13 19 8 15 3 15"/>';
 const I = {
+  mic: svg('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3M9 21h6"/>'),
   play: svg('<polygon points="6 4 20 12 6 20"/>', 1),
   pause: svg('<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>', 1),
   next: svg('<polygon points="5 4 15 12 5 20"/><line x1="19" y1="5" x2="19" y2="19"/>', 1),
@@ -107,7 +108,7 @@ function grid(metas, type) {
 }
 function bindCards() {
   view.querySelectorAll('.card,.hero').forEach(el => {
-    const open = () => openMeta(el.dataset.type, el.dataset.id);
+    const open = () => (el.classList.contains('ecard') ? openEpCard(el) : openMeta(el.dataset.type, el.dataset.id));
     el.onclick = open; el.onkeydown = (e) => e.key === 'Enter' && open();
   });
 }
@@ -269,7 +270,7 @@ const cardHtml = (m, type) => `<div class="card" tabindex="0" data-id="${esc(m.i
 function grid(metas, type) { return '<div class="grid">' + metas.map(m => cardHtml(m, type)).join('') + '</div>'; }
 function bindCards() {
   view.querySelectorAll('.card,.hero').forEach(el => {
-    const open = () => openMeta(el.dataset.type, el.dataset.id);
+    const open = () => (el.classList.contains('ecard') ? openEpCard(el) : openMeta(el.dataset.type, el.dataset.id));
     el.onclick = open; el.onkeydown = (e) => e.key === 'Enter' && open();
   });
   view.querySelectorAll('.star').forEach(b => b.onclick = (e) => {
@@ -652,7 +653,7 @@ const toast = (t) => { const d = document.createElement('div'); d.className = 't
 
 const arCard = (m) => {
   arCache.set(m.id, m);
-  return `<div class="card" tabindex="0" data-id="${esc(m.id)}" data-type="ar">${newIds.has(m.id) ? '<span class="badge">جديد</span>' : ''}<img loading="lazy" src="${esc(m.poster)}" alt=""><p>${esc(m.name)}</p><div class="cm"><span>${esc(arOk(m.type) ? m.type : '')}${isDub(m) ? ' 🎙 مدبلج' : ''}</span></div><div class="cm"><b class="rt">${arOk(m.score) ? esc(m.score) : ''}</b><button class="star" data-id="${esc(m.id)}" data-type="ar" data-name="${esc(m.name)}" data-poster="${esc(m.poster)}">${starSvg(isFavId(m.id))}</button></div></div>`;
+  return `<div class="card" tabindex="0" data-id="${esc(m.id)}" data-type="ar">${newIds.has(m.id) ? '<span class="badge">جديد</span>' : ''}<img loading="lazy" src="${esc(m.poster)}" alt=""><p>${esc(m.name)}</p><div class="cm"><span>${esc(arOk(m.type) ? m.type : '')}${isDub(m) ? ' ' + I.mic + ' مدبلج' : ''}</span></div><div class="cm"><b class="rt">${arOk(m.score) ? esc(m.score) : ''}</b><button class="star" data-id="${esc(m.id)}" data-type="ar" data-name="${esc(m.name)}" data-poster="${esc(m.poster)}">${starSvg(isFavId(m.id))}</button></div></div>`;
 };
 const arGrid = (list) => '<div class="grid">' + list.map(arCard).join('') + '</div>';
 
@@ -700,12 +701,13 @@ function dubbedRemote() {
 }
 async function dubbedList() {
   const qs = ['مدبلج', 'دبلجة'];
-  const [sd, cu, rem, ...rs] = await Promise.all([
+  const [a4, sd, cu, rem, ...rs] = await Promise.all([
+    a4uDubbed(),
     window.api.dub.list().then(l => l.map(m => (arCache.set(m.id, m), m))).catch(e => { console.log('[dub]', e && e.message); return []; }),
     customList().then(l => l.filter(isDub)), dubbedRemote(),
     ...qs.map(q => witSearch(q)), ...qs.map(q => window.api.ar.search(q).catch(() => []))
   ]);
-  return dedupe([...sd, ...cu, ...rem, ...rs.flat().map(m => ({ ...m, dubbed: true }))], newSeen());
+  return dedupe([...a4, ...sd, ...cu, ...rem, ...rs.flat().map(m => ({ ...m, dubbed: true }))], newSeen());
 }
 
 /* ===== WitAnime (منقول من anime_scraper) — التحليل بـ DOMParser ===== */
@@ -741,6 +743,118 @@ async function witSeason() {
     const a = home.querySelector('#menu-item-107 a'); if (!a) return [];
     return witCards(await witHtml(abs(a.getAttribute('href'))));
   } catch { return []; }
+}
+
+/* ===== anime4up — مصدر الأنمي المدبلج (نفس قالب WitAnime) =====
+   إذا تغيّر النطاق (كيتبدّل بزاف) زيد النطاق الجديد فـ أول القائمة A4U_HOSTS */
+const A4U_HOSTS = ['https://anime4up.rest/', 'https://w1.anime4up.rest/', 'https://anime4up.cam/', 'https://anime4up.pro/'];
+let a4uBase = A4U_HOSTS[0];
+const a4uAbs = (h) => { try { return new URL(h, a4uBase).href; } catch { return ''; } };
+async function a4uHtml(u) {
+  const isAbs = /^https?:/i.test(u), bad = [];
+  const order = [a4uBase, ...A4U_HOSTS.filter(h => h !== a4uBase)];
+  let path = u;
+  if (isAbs) { try { const x = new URL(u); path = x.pathname + x.search; } catch {} }
+  path = path.replace(/^\//, '');
+  for (const h of order) {
+    try {
+      const t = await window.api.html(h + path);
+      if (t && t.length > 500) { a4uBase = h; return new DOMParser().parseFromString(t, 'text/html'); }
+    } catch (e) { bad.push(h); }
+  }
+  throw new Error('تعذّر الاتصال بـ anime4up (جرّب تبدّل النطاق فـ A4U_HOSTS)');
+}
+const a4uSlug = (href) => { try { const p = new URL(href, a4uBase).pathname.split('/').filter(Boolean); const i = p.indexOf('anime'); return p[i >= 0 ? i + 1 : p.length - 1] || ''; } catch { return ''; } };
+const a4uImg = (el) => { const i = el && el.querySelector('img'); if (!i) return ''; const s = i.getAttribute('src') || ''; return a4uAbs(s.startsWith('data:') ? (i.getAttribute('data-src') || '') : (s || i.getAttribute('data-src') || '')); };
+const a4uCard = (c) => {
+  const a = c.querySelector('.anime-card-title h3 > a') || c.querySelector('h3 > a') || c.querySelector('a[href*="/anime/"]');
+  if (!a) return null;
+  const url = a4uAbs(a.getAttribute('href')), slug = a4uSlug(url);
+  if (!slug) return null;
+  const t = c.querySelector('.anime-card-type a'), st = c.querySelector('.anime-card-status a');
+  const tt = c.querySelector('.anime-card-title'), story = tt ? (tt.getAttribute('data-content') || '') : '';
+  const name = (a.textContent || '').trim() || (c.querySelector('img') || {}).alt || '';
+  const m = { id: 'a4u:' + slug, name, nameEn: '', poster: a4uImg(c), genres: '', score: '', synopsis: story,
+    type: t ? t.textContent.trim() : '', status: st ? st.textContent.trim() : '', url, src: 'a4u', dubbed: true };
+  arCache.set(m.id, m); return m;
+};
+const a4uCards = (doc) => [...doc.querySelectorAll('.anime-card-container')].map(a4uCard).filter(Boolean);
+const a4uCache = new Map();
+async function a4uSearch(q) {
+  q = String(q || '').trim(); if (!q) return [];
+  if (!a4uCache.has(q)) a4uCache.set(q, a4uHtml(`?search_param=animes&s=${encodeURIComponent(q)}`).then(a4uCards).catch(() => { a4uCache.delete(q); return []; }));
+  return a4uCache.get(q);
+}
+const A4U_DUB_RE = /مدبلج|دبلج|dubbed|dub\b/i;
+let a4uDubP = null;
+/* الأنمي المدبلج من anime4up: صفحات قسم المدبلج (إن وُجد) + بحث «مدبلج» و«دبلجة» (عدة صفحات) */
+function a4uDubbed() {
+  if (a4uDubP) return a4uDubP;
+  const pages = (base, n) => Array.from({ length: n }, (_, i) => {
+    if (!i) return base;
+    const q = base.indexOf('?');
+    return q < 0 ? `${base}page/${i + 1}/` : `${base.slice(0, q)}page/${i + 1}/${base.slice(q)}`;   // WordPress: page/2/?s=…
+  });
+  const urls = [
+    ...pages('anime-type/dubbed/', 4),
+    ...pages('?search_param=animes&s=' + encodeURIComponent('مدبلج'), 5),
+    ...pages('?search_param=animes&s=' + encodeURIComponent('دبلجة'), 2)
+  ];
+  a4uDubP = Promise.all(urls.map(u => a4uHtml(u).then(a4uCards).catch(() => []))).then(r => {
+    const all = r.flat(), onlyDub = all.filter(m => A4U_DUB_RE.test(m.name));
+    const out = onlyDub.length ? onlyDub : all;     // إلا السمية ما فيهاش «مدبلج» نخليو كلشي (النتائج أصلاً من بحث المدبلج)
+    out.forEach(m => { m.dubbed = true; });
+    if (!out.length) a4uDubP = null;
+    return out;
+  }).catch(() => { a4uDubP = null; return []; });
+  return a4uDubP;
+}
+async function a4uEpisodes(id) {
+  const m = arCache.get(id), slug = id.replace(/^a4u:/, '');
+  const doc = await a4uHtml(m && m.url ? m.url : `anime/${slug}/`);
+  const eps = [...doc.querySelectorAll('.episodes-card')].map((c, i) => {
+    const a = c.querySelector('.episodes-card-title h3 > a') || c.querySelector('h3 > a') || c.querySelector('a[href]'); if (!a) return null;
+    return { num: lastNum(a.textContent) || String(i + 1), url: a4uAbs(a.getAttribute('href')) };
+  }).filter(Boolean);
+  const seen = new Set();
+  return eps.filter(e => (seen.has(e.url) ? false : (seen.add(e.url), true))).sort((a, b) => parseFloat(a.num) - parseFloat(b.num));
+}
+async function a4uDetails(id) {
+  const m = arCache.get(id) || { id, name: id.replace(/^a4u:/, ''), nameEn: '', poster: '', genres: '', score: '', synopsis: '', src: 'a4u', dubbed: true };
+  try {
+    const doc = await a4uHtml(m.url || `anime/${id.replace(/^a4u:/, '')}/`);
+    const h = doc.querySelector('h1.anime-details-title'), g = [...doc.querySelectorAll('ul.anime-genres a')].map(x => x.textContent.trim());
+    const st = doc.querySelector('p.anime-story');
+    if (h) m.name = h.textContent.trim();
+    if (g.length) m.genres = g.join(',');
+    if (st) m.synopsis = st.textContent.trim();
+    if (!m.poster) m.poster = a4uImg(doc.querySelector('.anime-thumbnail, .anime-info-container, .anime-page-container') || doc.body);
+  } catch {}
+  m.dubbed = true; arCache.set(id, m); return m;
+}
+/* سيرفرات المشاهدة + روابط التحميل ديال الحلقة (روابط مباشرة، base64، أو iframe) */
+async function a4uServers(epUrl) {
+  const doc = await a4uHtml(epUrl), out = [], seen = new Set();
+  const b64 = (x) => { try { let b = String(x).replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; return atob(b); } catch { return ''; } };
+  const urlOf = (raw) => {
+    raw = String(raw || '').trim(); if (!raw) return '';
+    let m = raw.match(/https?:\/\/[^\s"'<>]+/); if (m) return m[0].replace(/&amp;/g, '&');
+    if (raw.startsWith('//')) return 'https:' + raw;
+    const d = b64(raw); m = d.match(/https?:\/\/[^\s"'<>]+/); return m ? m[0].replace(/&amp;/g, '&') : '';
+  };
+  const push = (label, raw) => {
+    const u = urlOf(raw);
+    if (!u || seen.has(u) || /(facebook|twitter|telegram|t\.me|discord|disqus|google|doubleclick)\./i.test(u) || hostOf(u) === hostOf(a4uBase)) return;
+    seen.add(u); out.push({ label: (label || '').replace(/\s+/g, ' ').trim(), url: u });
+  };
+  doc.querySelectorAll('[data-ep-url]').forEach(a => push(a.textContent, a.getAttribute('data-ep-url')));
+  doc.querySelectorAll('#episode-servers iframe[src], .episode-container iframe[src], iframe[src]').forEach(f => push('مشاهدة', f.getAttribute('src')));
+  doc.querySelectorAll('ul.quality-list').forEach(ul => {
+    const q = ((ul.querySelector('li') || {}).textContent || '').trim();
+    ul.querySelectorAll('a[href]').forEach(a => push('تحميل ' + q + ' ' + a.textContent, a.getAttribute('href')));
+  });
+  doc.querySelectorAll('#download a[href], .download-links a[href]').forEach(a => push('تحميل ' + a.textContent, a.getAttribute('href')));
+  return out;
 }
 async function witMatch(m) {
   const ks = keysOf(m);
@@ -795,7 +909,7 @@ async function playWitLink(u) {
 }
 
 const AR_GENRES = [["أكشن", "Action"], ["مغامرة", "Adventure"], ["كوميدي", "Comedy"], ["دراما", "Drama"], ["خيال", "Fantasy"], ["إيسيكاي", "Isekai"], ["رومانسي", "Romance"], ["خيال علمي", "Sci-Fi"], ["شونين", "Shounen"], ["الحياة اليومية", "Slice-Of-Life"], ["خارق للطبيعة", "Supernatural"], ["غموض", "Mystery"], ["تشويق", "Suspense"], ["رياضي", "Sports"], ["مدرسي", "School"], ["سينين", "Seinen"], ["شوچو", "Shoujo"], ["رعب", "Horror"], ["ميكا", "Mecha"], ["تاريخي", "Historical"], ["قوى خارقة", "Super-Power"], ["سحر", "Magic"], ["أساطير", "Mythology"], ["عسكري", "Military"], ["إيتشي", "Ecchi"], ["حريم", "Harem"], ["بطولة راشدين", "Adult-Cast"], ["طعام", "Gourmet"], ["موسيقى", "Music"], ["فضاء", "Space"], ["بوليسي", "Detective"], ["سفر عبر الزمن", "Time-Travel"], ["مصاصي دماء", "Vampire"], ["سايبربانك", "Cyberpunk"]];
-const AR_SECS = [['RECENT', 'آخر الحلقات'], ['latest', 'آخر الإضافات'], ['POPULARITY', 'الأكثر شعبية'], ['HIGHEST_RATE', 'الأعلى تقييماً'], ['AIRING', 'يُعرض حالياً'], ['SEASON', 'أنمي الموسم'], ['SCHEDULE', 'جدول الحلقات']];
+const AR_SECS = [['EPS', 'آخر الحلقات'], ['latest', 'آخر الإضافات'], ['DUBBED', 'مدبلج'], ['POPULARITY', 'الأكثر شعبية'], ['HIGHEST_RATE', 'الأعلى تقييماً'], ['AIRING', 'يُعرض حالياً'], ['SEASON', 'أنمي الموسم'], ['SCHEDULE', 'جدول الحلقات']];
 const AR_TYPES = [['SERIES', 'مسلسلات'], ['MOVIE', 'أفلام'], ['OVA', 'OVA'], ['SPECIAL', 'خاصة']];
 const AR_PAGE = 48;
 
@@ -858,10 +972,44 @@ function bindSchedule(box) {
     c.onclick = go; c.onkeydown = (e) => { if (e.key === 'Enter') go(); };
   });
 }
-async function recentHtml() {
-  const list = await window.api.recent();
-  if (!list.length) return '<p class="mute">ما لقينا حلقات جديدة دابا.</p>';
-  return '<div class="grid">' + list.map(x => `<div class="card sch" tabindex="0" data-q="${esc(x.title)}" data-q2="${esc(x.romaji)}"><span class="badge epb">الحلقة ${esc(x.ep)}</span><img loading="lazy" src="${esc(x.img)}" alt=""><p>${esc(x.title)}</p><div class="cm"><span>${x.status === 'RELEASING' ? 'مستمر' : 'مكتمل'}</span><b class="rt">${esc(x.score)}</b></div></div>`).join('') + '</div>';
+
+/* ===== آخر الحلقات الحقيقية: من anime4up + WitAnime + Stardima (مدبلج) — بدون AniList ===== */
+function siteEpCards(doc, kind) {
+  const A = kind === 'a4u' ? a4uAbs : abs, SL = kind === 'a4u' ? a4uSlug : witSlug, IM = kind === 'a4u' ? a4uImg : imgOf;
+  return [...doc.querySelectorAll('.episodes-card')].map(c => {
+    const ea = c.querySelector('.episodes-card-title a') || c.querySelector('h3 a'), aa = c.querySelector('.ep-card-anime-title a, a[href*="/anime/"]');
+    if (!ea) return null;
+    const etitle = ea.textContent.trim(), num = lastNum(etitle);
+    const name = ((aa && aa.textContent.trim()) || etitle.replace(/\s*(?:الحلقة|الحلقه|episode|ep)?\s*\d+(?:\.\d+)?\s*$/i, '')).trim();
+    const slug = aa ? SL(A(aa.getAttribute('href'))) : '';
+    if (!name || !num) return null;
+    return { id: slug ? kind + ':' + slug : '', name, ep: num, poster: IM(c), src: kind, dubbed: kind === 'a4u' && A4U_DUB_RE.test(name + ' ' + etitle) };
+  }).filter(Boolean);
+}
+async function latestEpisodes() {
+  const [a4, wit, sd] = await Promise.all([
+    a4uHtml('episode/').then(d => siteEpCards(d, 'a4u')).catch(() => []),
+    witHtml('episode').then(d => siteEpCards(d, 'wit')).catch(() => []),
+    window.api.dub.latest().catch(() => [])
+  ]);
+  const seen = new Set(), out = [];
+  [...sd.map(m => ({ id: m.id, name: m.name, ep: m.ep, poster: m.poster, src: 'sd', dubbed: true })), ...a4, ...wit].forEach(x => {
+    const k = normT(x.name) + '#' + x.ep; if (seen.has(k)) return; seen.add(k); out.push(x);
+  });
+  return out;
+}
+const epSrcName = { a4u: 'anime4up', wit: 'WitAnime', sd: 'Stardima' };
+function epCard(x) {
+  return `<div class="card ecard" tabindex="0" data-id="${esc(x.id)}" data-ep="${esc(x.ep)}" data-q="${esc(x.name)}" data-src="${esc(x.src)}"><span class="badge epb">الحلقة ${esc(x.ep)}</span><img loading="lazy" src="${esc(x.poster)}" alt=""><p>${esc(x.name)}</p><div class="cm"><span>${x.dubbed ? I.mic + ' مدبلج' : esc(epSrcName[x.src] || '')}</span></div></div>`;
+}
+async function openEpCard(el) {
+  const d = el.dataset;
+  if (d.id) return openAr(d.id, d.ep);
+  say('جارٍ التحميل…');
+  const r = d.src === 'a4u' ? await a4uSearch(d.q) : await witSearch(d.q);
+  const nq = normT(d.q), hit = r.find(m => normT(m.name) === nq) || r[0];
+  if (hit) return openAr(hit.id, d.ep);
+  arLoadCatalog(d.q);
 }
 const AF = { sec: 'latest', genre: '', type: 'SERIES', list: [], seen: newSeen(), off: 0, busy: false, done: false, token: 0 };
 
@@ -886,9 +1034,11 @@ async function arMore(reset) {
     if (AF.sec === 'CUSTOM' && !AF.genre) {                        // أنمي أضفته أنت (custom.json)
       fresh = dedupe(await customList(true), AF.seen); AF.done = true;
       if (!fresh.length) { box.innerHTML = '<p class="mute">ما زدت حتى أنمي. افتح الملف وزيد أنمي (فيه مثال في custom.example.json).</p><button class="primary" id="copen">فتح custom.json</button>'; $('#copen').onclick = () => window.api.custom.open(); }
-    } else if (AF.sec === 'RECENT' && !AF.genre) {                       // آخر الحلقات اللي خرجات (AniList)
-      const html = await recentHtml(); if (tk !== AF.token) return;
-      AF.done = true; box.innerHTML = `<div style="grid-column:1/-1">${html}</div>`; bindSchedule(box);
+    } else if (AF.sec === 'EPS' && !AF.genre) {                         // آخر الحلقات الحقيقية
+      const list = await latestEpisodes(); if (tk !== AF.token) return;
+      AF.done = true;
+      box.innerHTML = list.length ? list.map(epCard).join('') : '<p class="mute">ما لقينا حلقات جديدة دابا. تأكد من الاتصال أو من نطاق anime4up.</p>';
+      AF.list = list; bindCards();
     } else if (AF.sec === 'SCHEDULE' && !AF.genre) {                     // جدول الحلقات القادمة
       const html = await scheduleHtml(); if (tk !== AF.token) return;
       AF.done = true; box.innerHTML = `<div style="grid-column:1/-1">${html}</div>`; bindSchedule(box);
@@ -914,9 +1064,9 @@ async function arMore(reset) {
     AF.list.push(...fresh);
     if (reset && fresh.length) box.innerHTML = '';
     box.insertAdjacentHTML('beforeend', fresh.map(arCard).join(''));
-    if (!AF.list.length && AF.sec !== 'CUSTOM' && !(['DUBBED', 'SCHEDULE', 'RECENT'].includes(AF.sec) && !AF.genre)) box.innerHTML = '<p class="mute">لا توجد نتائج لهذا الفلتر.</p>';
+    if (!AF.list.length && AF.sec !== 'CUSTOM' && !(['DUBBED', 'SCHEDULE', 'EPS'].includes(AF.sec) && !AF.genre)) box.innerHTML = '<p class="mute">لا توجد نتائج لهذا الفلتر.</p>';
     bindCards();
-    cnt.textContent = AF.sec === 'RECENT' && !AF.genre ? 'آخر 3 أيام' : AF.sec === 'SCHEDULE' && !AF.genre ? 'الأسبوع القادم' : AF.list.length + ' أنمي';
+    cnt.textContent = AF.sec === 'SCHEDULE' && !AF.genre ? 'الأسبوع القادم' : AF.sec === 'EPS' && !AF.genre ? AF.list.length + ' حلقة' : AF.list.length + ' أنمي';
   } catch (e) { if (tk === AF.token) box.insertAdjacentHTML('beforeend', '<p class="mute">خطأ: ' + esc(errMsg(e)) + '</p>'); }
   finally {
     AF.busy = false;
@@ -930,8 +1080,8 @@ async function arLoadCatalog(search) {
     say('جارٍ البحث…');
     try {
       const nq = normT(search);
-      const [a, w, cu, sd] = await Promise.all([window.api.ar.search(search).catch(() => []), witSearch(search), customList().then(l => l.filter(m => keysOf(m).some(k => k.includes(nq)))), window.api.dub.search(search).catch(() => [])]);
-      const r = dedupe([...cu, ...sd, ...a, ...w], newSeen());
+      const [a, w, cu, sd, a4] = await Promise.all([window.api.ar.search(search).catch(() => []), witSearch(search), customList().then(l => l.filter(m => keysOf(m).some(k => k.includes(nq)))), window.api.dub.search(search).catch(() => []), a4uSearch(search)]);
+      const r = dedupe([...cu, ...sd, ...a4, ...a, ...w], newSeen());
       view.innerHTML = `<div class="sec"><h3>نتائج: ${esc(search)} (${r.length})</h3>` + (r.length ? arGrid(r) : '<p class="mute">لا توجد نتائج.</p>') + '</div>';
       bindCards();
     } catch (e) { say('خطأ: ' + errMsg(e)); }
@@ -962,7 +1112,7 @@ async function arLoadCatalog(search) {
   const syncChips = () => {
     view.querySelectorAll('#fsec .chip').forEach(c => c.classList.toggle('on', !AF.genre && c.dataset.sec === AF.sec));
     view.querySelectorAll('#ftype .chip').forEach(c => c.classList.toggle('on', c.dataset.type === AF.type));
-    $('#ftype').style.display = ['DUBBED', 'SCHEDULE', 'RECENT'].includes(AF.sec) && !AF.genre ? 'none' : '';
+    $('#ftype').style.display = ['DUBBED', 'SCHEDULE', 'EPS'].includes(AF.sec) && !AF.genre ? 'none' : '';
   };
   view.querySelectorAll('#fsec .chip').forEach(c => c.onclick = () => { AF.sec = c.dataset.sec; AF.genre = ''; $('#fgenre').value = ''; syncChips(); arMore(true); });
   view.querySelectorAll('#ftype .chip').forEach(c => c.onclick = () => { AF.type = c.dataset.type; syncChips(); arMore(true); });
@@ -1002,9 +1152,9 @@ async function watchNew() {
   const ids = [...new Set([...store.get('fav', []), ...store.get('hist', []).slice(0, 10)].filter(x => x && x.type === 'ar').map(x => x.id))].filter(id => !/^(custom|sd):/.test(String(id))).slice(0, 20);
   for (const id of ids) {
     try {
-      const isWit = String(id).startsWith('wit:');
-      const m = isWit ? await witDetails(id) : await arDetails(id);
-      const eps = isWit ? await witEpisodes(id) : await window.api.ar.episodes(id).catch(() => []);
+      const isWit = String(id).startsWith('wit:'), isA4u = String(id).startsWith('a4u:');
+      const m = isWit ? await witDetails(id) : isA4u ? await a4uDetails(id) : await arDetails(id);
+      const eps = isWit ? await witEpisodes(id) : isA4u ? await a4uEpisodes(id) : await window.api.ar.episodes(id).catch(() => []);
       const al = await anilistEps(m, true).catch(() => null);
       if (al && !al.next && al.status !== 'RELEASING') continue;     // أنمي منتهي → ما يهمناش
       const nums = eps.map(e => parseFloat(e.num)).filter(n => !isNaN(n));
@@ -1067,13 +1217,13 @@ function mergeAl(eps, al) {
   return { eps: out, added };
 }
 
-async function openAr(id) {
+async function openAr(id, wantEp) {
   say('جارٍ التحميل…');
   try {
-    const isWit = String(id).startsWith('wit:'), isCustom = String(id).startsWith('custom:'), isSd = String(id).startsWith('sd:'), sdId = isSd ? String(id).slice(3) : '';
+    const isWit = String(id).startsWith('wit:'), isA4u = String(id).startsWith('a4u:'), isCustom = String(id).startsWith('custom:'), isSd = String(id).startsWith('sd:'), sdId = isSd ? String(id).slice(3) : '';
     if (isCustom && !arCache.has(id)) { await customList(); if (!arCache.has(id)) await dubbedRemote(); }
     if (isSd && !arCache.has(id)) { const d = await window.api.dub.detail(sdId).catch(() => null); if (d) arCache.set(id, d); }
-    const m = (isCustom || isSd) ? arCache.get(id) : isWit ? await witDetails(id) : await arDetails(id);
+    const m = (isCustom || isSd) ? arCache.get(id) : isWit ? await witDetails(id) : isA4u ? await a4uDetails(id) : await arDetails(id);
     if (!m) throw new Error(isSd ? 'تعذّر جلب هذا الأنمي المدبلج' : 'هذا الأنمي ما بقاش في custom.json');
     let eps = [], witP = null, alAdded = 0, alInfo = null;
     const alP = (isCustom || isSd) ? null : anilistEps(m).catch(() => null);   // بالتوازي مع جلب الحلقات
@@ -1081,6 +1231,7 @@ async function openAr(id) {
     if (isCustom) eps = m.episodes.map((e, i) => ({ num: String(e.num ?? i + 1), custom: e }));
     else if (isSd) { const r = await window.api.dub.episodes(sdId).catch(() => ({ eps: [] })); sdMovie = !!r.movie; eps = (r.eps || []).map(e => ({ num: e.num, sd: e.id })); }
     else if (isWit) eps = (await witEpisodes(id)).map(e => ({ num: e.num, wit: e.url }));
+    else if (isA4u) eps = (await a4uEpisodes(id)).map(e => ({ num: e.num, a4u: e.url }));
     else {
       eps = await window.api.ar.episodes(id).catch(() => []);
       witP = witMatch(m).then(w => (w ? witEpisodes(w.id) : [])).catch(() => []);   // نفس الأنمي في WitAnime (إن وُجد) كسيرفرات إضافية
@@ -1129,14 +1280,16 @@ async function openAr(id) {
       ]);
       if (!b.classList.contains('on')) return;
       const btns = ar.map(x => ({ t: `Mediafire · ${x.q}`, f: () => play({ url: x.url }) }));
-      if (e.sd) (await window.api.dub.streams({ id: sdId, ep: e.sd, movie: sdMovie }).catch(() => [])).forEach(x => btns.push({ t: `🎙 مدبلج · ${x.label}${x.res ? ' · ' + x.res : ''}${x.direct ? '' : ' · ' + hostOf(x.url)}`, f: () => (x.direct ? play({ url: x.url }) : playWitLink(x.url)) }));
+      if (e.sd) (await window.api.dub.streams({ id: sdId, ep: e.sd, movie: sdMovie }).catch(() => [])).forEach(x => btns.push({ t: `@@mic@@ مدبلج · ${x.label}${x.res ? ' · ' + x.res : ''}${x.direct ? '' : ' · ' + hostOf(x.url)}`, f: () => (x.direct ? play({ url: x.url }) : playWitLink(x.url)) }));
       if (e.custom) (e.custom.urls || [{ name: 'رابط', url: e.custom.url }]).filter(u => u && u.url).forEach(u => btns.push({ t: `${u.name || 'رابط'} · ${hostOf(u.url)}`, f: () => playWitLink(u.url) }));
+      if (e.a4u) (await a4uServers(e.a4u).catch(() => [])).forEach(x => btns.push({ t: `@@mic@@ مدبلج · ${x.label || 'سيرفر'} · ${hostOf(x.url)}`, f: () => playWitLink(x.url) }));
       wq.forEach(g => g.links.slice(0, 4).forEach(l => btns.push({ t: `WitAnime · ${g.q} · ${hostOf(l)}`, f: () => playWitLink(l) })));
       if (!btns.length) return (out.innerHTML = '<p class="mute">لا توجد روابط لهذه الحلقة حالياً. جرّب حلقة أخرى.</p>');
-      out.innerHTML = '<div class="streams">' + btns.slice(0, 16).map((x, i) => `<button data-i="${i}">${I.play} ${esc(x.t)}</button>`).join('') + '</div><div id="player"></div>';
+      out.innerHTML = '<div class="streams">' + btns.slice(0, 24).map((x, i) => `<button data-i="${i}">${I.play} ${esc(x.t).replace('@@mic@@', I.mic)}</button>`).join('') + '</div><div id="player"></div>';
       out.querySelectorAll('.streams button').forEach(sb => sb.onclick = () => btns[sb.dataset.i].f());
     });
     bindEps();
+    if (wantEp) { const wb = [...view.querySelectorAll('.eps button')].find(x => x.textContent.trim() === String(wantEp)); if (wb) wb.click(); }
 
     // تحديث تلقائي: كل 5 دقايق (وكي ترجع للنافذة) نسولو المصادر + AniList ونزيدو الحلقات الجديدة بلا ما نخرجو من الصفحة
     if (!isCustom && !isSd) {
@@ -1148,6 +1301,7 @@ async function openAr(id) {
         try {
           let base;
           if (isWit) base = (await witEpisodes(id)).map(e => ({ num: e.num, wit: e.url }));
+          else if (isA4u) base = (await a4uEpisodes(id)).map(e => ({ num: e.num, a4u: e.url }));
           else {
             base = await window.api.ar.episodes(id).catch(() => null);
             if (base === null) return;
@@ -1282,11 +1436,11 @@ let smTok = 0;
 function closeSearch() { const s = $('#sm'); if (s) s.remove(); smTok++; }
 async function smSearch(q) {
   const nq = normT(q);
-  const [a, w, cu] = await Promise.all([
-    window.api.ar.search(q).catch(() => []), witSearch(q).catch(() => []),
+  const [a, w, a4, cu] = await Promise.all([
+    window.api.ar.search(q).catch(() => []), witSearch(q).catch(() => []), a4uSearch(q).catch(() => []),
     customList().then(l => l.filter(m => keysOf(m).some(k => k.includes(nq)))).catch(() => [])
   ]);
-  const r = dedupe([...cu, ...a, ...w], newSeen());
+  const r = dedupe([...cu, ...a4, ...a, ...w], newSeen());
   r.forEach(m => arCache.set(m.id, m));
   return r.slice(0, 30);
 }
