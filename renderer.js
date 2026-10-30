@@ -986,25 +986,139 @@ function siteEpCards(doc, kind) {
     return { id: slug ? kind + ':' + slug : '', name, ep: num, poster: IM(c), src: kind, dubbed: kind === 'a4u' && A4U_DUB_RE.test(name + ' ' + etitle) };
   }).filter(Boolean);
 }
-async function latestEpisodes() {
-  const [a4, wit, sd] = await Promise.all([
-    a4uHtml('episode/').then(d => siteEpCards(d, 'a4u')).catch(() => []),
-    witHtml('episode').then(d => siteEpCards(d, 'wit')).catch(() => []),
-    window.api.dub.latest().catch(() => [])
-  ]);
-  const seen = new Set(), out = [];
-  [...sd.map(m => ({ id: m.id, name: m.name, ep: m.ep, poster: m.poster, src: 'sd', dubbed: true })), ...a4, ...wit].forEach(x => {
-    const k = normT(x.name) + '#' + x.ep; if (seen.has(k)) return; seen.add(k); out.push(x);
-  });
+/* ===================================================================
+   آخر الحلقات = 4 أدوات (كل وحدة تخدم بروحها) + مدير واحد يجمعهم ويمنع تكرار الأنمي
+   الأدوات: Anime3rb · WitAnime · Anime4up · Animeify   (+ Stardima للمدبلج)
+   =================================================================== */
+// أداة 1: Anime3rb (JSON-LD فـ الصفحة الرئيسية — منقول من Anime3rbDL). محمي بـ Cloudflare: نجربو عادي ثم متصفح مخفي (ويندوز)
+const A3R = 'https://anime3rb.com/';
+async function a3rLatest() {
+  let html = '';
+  try { html = await window.api.html(A3R); } catch {}
+  if (!/application\/ld\+json/.test(html)) {
+    if (!window.api.htmlBrowser) throw new Error('محمي بـ Cloudflare (كيخدم فـ نسخة ويندوز)');
+    html = await window.api.htmlBrowser(A3R).catch(() => { throw new Error('محمي بـ Cloudflare (كيخدم غير فـ نسخة ويندوز)'); });
+  }
+  const doc = new DOMParser().parseFromString(html, 'text/html'), out = [];
+  const find = (d, name) => {
+    if (Array.isArray(d)) { for (const x of d) { const r = find(x, name); if (r) return r; } return null; }
+    if (d && typeof d === 'object') {
+      if (d['@type'] === 'ItemList' && d.name === name) return d.itemListElement || [];
+      for (const v of Object.values(d)) { const r = find(v, name); if (r) return r; }
+    }
+    return null;
+  };
+  for (const sc of doc.querySelectorAll('script[type="application/ld+json"]')) {
+    let j; try { j = JSON.parse(sc.textContent); } catch { continue; }
+    const items = find(j, 'أحدث الحلقات'); if (!items) continue;
+    items.forEach(it => {
+      it = it.item || it;
+      const u = String(it.url || ''), m = u.match(/\/episode\/([^/]+)\/(\d+(?:\.\d+)?)\/?$/);
+      if (!m) return;
+      const name = String(it.name || '').replace(/\s*(?:الحلقة|الحلقه)?\s*\d+(?:\.\d+)?\s*$/, '').replace(/\s*(?:الحلقة|الحلقه)\s*$/, '').trim();
+      if (name) out.push({ id: '', name, ep: m[2], poster: it.image || '', src: 'a3r', url: u, dubbed: false });
+    });
+    if (out.length) break;
+  }
+  if (!out.length) throw new Error('ما لقيناش قائمة الحلقات فـ الصفحة');
   return out;
 }
-const epSrcName = { a4u: 'anime4up', wit: 'WitAnime', sd: 'Stardima' };
-function epCard(x) {
-  return `<div class="card ecard" tabindex="0" data-id="${esc(x.id)}" data-ep="${esc(x.ep)}" data-q="${esc(x.name)}" data-src="${esc(x.src)}"><span class="badge epb">الحلقة ${esc(x.ep)}</span><img loading="lazy" src="${esc(x.poster)}" alt=""><p>${esc(x.name)}</p><div class="cm"><span>${x.dubbed ? I.mic + ' مدبلج' : esc(epSrcName[x.src] || '')}</span></div></div>`;
+// أداة 2: WitAnime  |  أداة 3: Anime4up  (نفس القالب)
+const witLatestEps = () => witHtml('episode').then(d => siteEpCards(d, 'wit'));
+const a4uLatestEps = () => a4uHtml('episode/').then(d => siteEpCards(d, 'a4u'));
+// أداة 4: Animeify — ما عندوش feed ديال الحلقات: نجيبو آخر أنمي مضاف ونقرا آخر حلقة حقيقية فـ كل واحد
+async function afyLatestEpisodes() {
+  const list = await window.api.ar.list({ latest: true, limit: 14, from: 0 });
+  const res = await Promise.all(list.filter(m => !/movie|film|فيلم/i.test(m.type || '')).slice(0, 12).map(async m => {
+    try {
+      const eps = (await window.api.ar.episodes(m.id)).filter(e => (e.type || 'Episode') === 'Episode' && parseFloat(e.num) > 0);
+      if (!eps.length) return null;
+      arCache.set(m.id, m);
+      return { id: m.id, name: m.name, ep: String(eps[eps.length - 1].num), poster: m.poster, src: 'afy', dubbed: false };
+    } catch { return null; }
+  }));
+  return res.filter(Boolean);
 }
+const sdLatestEps = () => window.api.dub.latest().then(l => l.map(m => ({ id: m.id, name: m.name, ep: m.ep, poster: m.poster, src: 'sd', dubbed: true })));
+
+const EP_TOOLS = [
+  { key: 'a3r', name: 'Anime3rb', run: a3rLatest },
+  { key: 'wit', name: 'WitAnime', run: witLatestEps },
+  { key: 'a4u', name: 'Anime4up', run: a4uLatestEps },
+  { key: 'afy', name: 'Animeify', run: afyLatestEpisodes },
+  { key: 'sd', name: 'Stardima', run: sdLatestEps }
+];
+const epWithTimeout = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error('انتهى الوقت')), ms))]);
+
+/* مدير الأنمي: اسم موحّد (بلا «مترجم/مدبلج/الحلقة…») + نفس الأنمي من عدة مواقع = بطاقة وحدة بأعلى حلقة */
+const epBaseName = (n) => String(n || '')
+  .replace(/[\(\[\{].*?[\)\]\}]/g, ' ')
+  .replace(/(?:الحلقة|الحلقه|حلقة|episode|ep)\s*\d+(?:\.\d+)?/gi, ' ')
+  .replace(/(^|\s)(?:مترجم[ةه]?|مدبلج[ةه]?|اون\s*لاين|أون\s*لاين|online|dubbed|subbed|الاخيرة|الأخيرة)(?=\s|$)/gi, ' ')
+  .replace(/\s+/g, ' ').trim();
+const epAnimeKey = (n) => normT(epBaseName(n));
+function epSame(a, b) {
+  if (a === b) return true;
+  const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+  return s.length >= 7 && l.includes(s) && _seasonOf(a) === _seasonOf(b) && s.length / l.length >= 0.8;
+}
+const epKey = (x) => (x.akey || epAnimeKey(x.name)) + '#' + x.ep;
+function epMerge(batches) {
+  const order = ['afy', 'a4u', 'wit', 'sd', 'a3r'];            // أي مصدر نفتحو بيه داخل التطبيق (id)
+  const maxLen = Math.max(0, ...batches.map(b => b.length)), flat = [];
+  for (let i = 0; i < maxLen; i++) batches.forEach(b => { if (b[i]) flat.push(b[i]); });   // نخلطو المصادر باش ما يغلبش واحد
+  const groups = [];
+  flat.forEach(x => {
+    const k = epAnimeKey(x.name); if (!k) return;
+    let g = groups.find(g => epSame(g.k, k)); if (!g) { g = { k, items: [] }; groups.push(g); }
+    g.items.push(x);
+  });
+  return groups.map(g => {
+    const top = Math.max(...g.items.map(x => parseFloat(x.ep) || 0));
+    const at = g.items.filter(x => (parseFloat(x.ep) || 0) === top);
+    const pick = (f) => order.map(k => at.find(x => x.src === k && f(x))).find(Boolean);
+    const main = pick(x => x.id) || at[0];
+    return {
+      id: main.id || '', name: epBaseName(main.name) || main.name, ep: String(top), akey: g.k,
+      poster: (at.find(x => x.poster) || {}).poster || '', src: main.src, srcs: [...new Set(at.map(x => x.src))],
+      url: (at.find(x => x.url) || {}).url || '', dubbed: at.some(x => x.dubbed)
+    };
+  });
+}
+const EPM = { status: {}, at: 0 };
+async function latestEpisodes() {
+  const res = await Promise.all(EP_TOOLS.map(async t => {
+    try { const l = await epWithTimeout(t.run(), 40000); EPM.status[t.key] = { ok: true, n: l.length }; return l; }
+    catch (e) { EPM.status[t.key] = { ok: false, err: errMsg(e) }; return []; }
+  }));
+  EPM.at = Date.now();
+  return epMerge(res);
+}
+const epSrcName = { a3r: 'Anime3rb', a4u: 'Anime4up', wit: 'WitAnime', sd: 'Stardima', afy: 'Animeify' };
+const epNew = new Set();                                   // حلقات جديدة (تزادت من آخر فحص)
+function epCard(x) {
+  const srcs = (x.srcs || [x.src]).map(k => epSrcName[k] || '').filter(Boolean).join(' · ');
+  return `<div class="card ecard" tabindex="0" data-id="${esc(x.id)}" data-ep="${esc(x.ep)}" data-q="${esc(x.name)}" data-src="${esc(x.src)}" data-url="${esc(x.url || '')}"><span class="badge epb">الحلقة ${esc(x.ep)}</span>${epNew.has(epKey(x)) ? '<span class="badge" style="top:auto;bottom:58px">جديد</span>' : ''}<img loading="lazy" src="${esc(x.poster)}" alt=""><p>${esc(x.name)}</p><div class="cm"><span>${x.dubbed ? I.mic + ' مدبلج · ' : ''}${esc(srcs)}</span></div></div>`;
+}
+/* شريط حالة الأدوات (واش كل أداة خدمات ولا لا) + زر تحديث الآن */
+function epStatusHtml() {
+  const chips = EP_TOOLS.map(t => {
+    const st = EPM.status[t.key];
+    const mark = !st ? '…' : st.ok ? '✓ ' + st.n : '✗';
+    const col = !st ? '#999' : st.ok ? '#3ecf6e' : '#ff6b6b';
+    return `<span title="${esc(st && !st.ok ? st.err : '')}" style="display:inline-block;margin:2px 4px;padding:3px 10px;border-radius:999px;border:1px solid ${col};color:${col};font-size:12px">${esc(t.name)} ${mark}</span>`;
+  }).join('');
+  const t = EPM.at ? new Date(EPM.at).toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) : '';
+  return `<div style="grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px">${chips}<span class="mute" style="font-size:12px">آخر فحص ${esc(t)} · كل 30 دقيقة</span><button class="primary" id="epNow" style="margin-inline-start:auto">تحديث الآن</button></div>`;
+}
+function epGridHtml(list) {
+  return epStatusHtml() + (list.length ? list.map(epCard).join('') : '<p class="mute" style="grid-column:1/-1">ما لقينا حلقات جديدة دابا. شوف الأدوات اللي فوق: اللي فيها ✗ ما خدمتش (النطاق تبدل أو الموقع محمي).</p>');
+}
+function bindEpStatus() { const b = $('#epNow'); if (b) b.onclick = async () => { b.disabled = true; b.textContent = 'جارٍ الفحص…'; await window.epCheck(true); }; }
 async function openEpCard(el) {
   const d = el.dataset;
   if (d.id) return openAr(d.id, d.ep);
+  if (d.src === 'a3r' && d.url) return window.api.openExternal(d.url);   // Anime3rb: محمي، كيتفتح بالمتصفح
   say('جارٍ التحميل…');
   const r = d.src === 'a4u' ? await a4uSearch(d.q) : await witSearch(d.q);
   const nq = normT(d.q), hit = r.find(m => normT(m.name) === nq) || r[0];
@@ -1037,8 +1151,9 @@ async function arMore(reset) {
     } else if (AF.sec === 'EPS' && !AF.genre) {                         // آخر الحلقات الحقيقية
       const list = await latestEpisodes(); if (tk !== AF.token) return;
       AF.done = true;
-      box.innerHTML = list.length ? list.map(epCard).join('') : '<p class="mute">ما لقينا حلقات جديدة دابا. تأكد من الاتصال أو من نطاق anime4up.</p>';
-      AF.list = list; bindCards();
+      store.set('epSeen2', [...new Set([...store.get('epSeen2', []), ...list.map(epKey)])].slice(-3000));
+      box.innerHTML = epGridHtml(list);
+      AF.list = list; bindCards(); bindEpStatus();
     } else if (AF.sec === 'SCHEDULE' && !AF.genre) {                     // جدول الحلقات القادمة
       const html = await scheduleHtml(); if (tk !== AF.token) return;
       AF.done = true; box.innerHTML = `<div style="grid-column:1/-1">${html}</div>`; bindSchedule(box);
@@ -1554,12 +1669,40 @@ document.addEventListener('keydown', (e) => {
     } catch {}
   }
   window.arRefresh = arRefresh;
+  /* ===== فحص آخر الحلقات الحقيقية كل 30 دقيقة (anime4up + WitAnime + Animeify + Stardima) ===== */
+  const EP_EVERY = 30 * 60 * 1000;
+  let epLast = 0, epBusy = false;
+  async function epCheck(manual) {
+    if (epBusy) return; epBusy = true; epLast = Date.now();
+    try {
+      const list = await latestEpisodes();
+      if (!list.length) { if (manual) toast('ما لقينا حلقات دابا'); return; }
+      const known = new Set(store.get('epSeen2', []));
+      const first = known.size === 0;
+      const fresh = first ? [] : list.filter(x => !known.has(epKey(x)));
+      store.set('epSeen2', [...new Set([...known, ...list.map(epKey)])].slice(-3000));
+      store.set('epCheckedAt', Date.now());
+      fresh.forEach(x => epNew.add(epKey(x)));
+      const box = $('#agrid');
+      if (box && AF.sec === 'EPS' && !AF.genre) {            // القسم مفتوح: نحطو الجديد فوق ونعاودو الترتيب
+        AF.list = [...fresh, ...list.filter(x => !fresh.includes(x))];
+        box.innerHTML = epGridHtml(AF.list); bindCards(); bindEpStatus();
+        const c = $('#acount'); if (c) c.textContent = AF.list.length + ' حلقة · آخر تحديث ' + new Date().toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' });
+      }
+      if (fresh.length) toast('نزلت ' + fresh.length + ' حلقة جديدة فـ «آخر الحلقات»');
+      else if (manual) toast('ما كاين حتى حلقة جديدة دابا');
+    } catch (e) { if (manual) toast('خطأ: ' + errMsg(e)); }
+    finally { epBusy = false; }
+  }
+  window.epCheck = epCheck;
+  setTimeout(() => epCheck(false), 15000);
+  setInterval(() => epCheck(false), EP_EVERY);
   setInterval(arRefresh, 5 * 60 * 1000);
   pushBg();
   if (window.api.onHidden) window.api.onHidden(() => document.querySelectorAll('video,audio').forEach(v => { try { v.pause(); } catch {} }));
   setTimeout(watchNew, 20000); setInterval(watchNew, 10 * 60 * 1000);   // فحص الحلقات الجديدة للمفضلة وآخر ما شاهدته
   if (window.api.onNotifyOpen) window.api.onNotifyOpen((id) => openAr(id));
-  window.addEventListener('focus', () => { if (Date.now() - lastRef > 60000) arRefresh(); });
+  window.addEventListener('focus', () => { if (Date.now() - lastRef > 60000) arRefresh(); if (Date.now() - epLast > EP_EVERY) epCheck(false); });
   view.addEventListener('scroll', () => {
     if ($('#agrid') && view.scrollTop + view.clientHeight > view.scrollHeight - 400) arMore();
   });

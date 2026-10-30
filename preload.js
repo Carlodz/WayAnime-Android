@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('api', {
   custom: { list: () => ipcRenderer.invoke('custom:list'), open: () => ipcRenderer.invoke('custom:open') },
   resolveHost: (u) => ipcRenderer.invoke('host:resolve', u),
   html: (url) => ipcRenderer.invoke('web:html', url),
+  htmlBrowser: (url) => ipcRenderer.invoke('web:browserHtml', url),
   update: { onState: (cb) => ipcRenderer.on('update:state', (_e, s) => cb(s)), state: () => ipcRenderer.invoke('update:state'), install: () => ipcRenderer.invoke('update:install') },
   logos: () => ipcRenderer.invoke('logos:list'),
   openExternal: (url) => ipcRenderer.invoke('open:external', url)

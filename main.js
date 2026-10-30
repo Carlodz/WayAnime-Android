@@ -1066,6 +1066,24 @@ ipcMain.handle('bg:set', (_e, o) => {
   try { app.setLoginItemSettings({ openAtLogin: bg.keep && bg.autostart, args: ['--hidden'] }); } catch {}
   return true;
 });
+// صفحة محمية بـ Cloudflare (مثل Anime3rb): نفتحوها فـ نافذة مخفية ونرجعو الـ HTML بعد ما يتحل التحدي
+ipcMain.handle('web:browserHtml', async (_e, url) => {
+  if (!/^https:\/\//i.test(url)) throw new Error('رابط غير صالح');
+  const w = new BrowserWindow({ show: false, width: 1100, height: 800, webPreferences: { partition: 'persist:cf', backgroundThrottling: false, sandbox: true } });
+  try {
+    w.webContents.setUserAgent(UA);
+    w.loadURL(url).catch(() => {});
+    const t0 = Date.now();
+    while (Date.now() - t0 < 30000) {
+      await new Promise((r) => setTimeout(r, 1200));
+      if (w.isDestroyed()) break;
+      const ok = await w.webContents.executeJavaScript(
+        "!!document.querySelector('script[type=\"application/ld+json\"]') && !/just a moment|attention required/i.test(document.title)").catch(() => false);
+      if (ok) return await w.webContents.executeJavaScript('document.documentElement.outerHTML');
+    }
+    throw new Error('Cloudflare');
+  } finally { try { if (!w.isDestroyed()) w.destroy(); } catch {} }
+});
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
   app.on('second-instance', showMain);
